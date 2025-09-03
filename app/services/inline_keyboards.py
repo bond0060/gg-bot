@@ -23,6 +23,12 @@ class CallbackAction(str, Enum):
     AIRPORT_PREF = "airport"
     TRAVEL_TIME = "time"
     FLIGHT_CHOICE = "flight_choice"
+    
+    # Custom buttons
+    QUICK_FLIGHT_SEARCH = "quick_flight"
+    BOOK_HOTEL = "book_hotel"
+    GET_WEATHER = "weather"
+    SHARE_LOCATION = "share_loc"
 
 
 class InlineKeyboardService:
@@ -260,6 +266,38 @@ class InlineKeyboardService:
                 buttons.append(row)
         
         return buttons
+    
+    def create_custom_buttons(self, chat_id: int, button_types: List[str] = None) -> Optional[InlineKeyboardMarkup]:
+        """Create custom buttons for specific actions"""
+        
+        if not button_types:
+            button_types = ["quick_flight", "book_hotel", "weather"]
+        
+        keyboard = []
+        
+        for button_type in button_types:
+            if button_type == "quick_flight":
+                keyboard.append([
+                    InlineKeyboardButton("✈️ 快速查询航班", 
+                        callback_data=self._create_callback(CallbackAction.QUICK_FLIGHT_SEARCH, "search", chat_id))
+                ])
+            elif button_type == "book_hotel":
+                keyboard.append([
+                    InlineKeyboardButton("🏨 预订酒店", 
+                        callback_data=self._create_callback(CallbackAction.BOOK_HOTEL, "book", chat_id))
+                ])
+            elif button_type == "weather":
+                keyboard.append([
+                    InlineKeyboardButton("🌤️ 查看天气", 
+                        callback_data=self._create_callback(CallbackAction.GET_WEATHER, "check", chat_id))
+                ])
+            elif button_type == "share_location":
+                keyboard.append([
+                    InlineKeyboardButton("📍 分享位置", 
+                        callback_data=self._create_callback(CallbackAction.SHARE_LOCATION, "share", chat_id))
+                ])
+        
+        return InlineKeyboardMarkup(keyboard) if keyboard else None
     
     def _create_action_buttons(self, chat_id: int, context: Dict[str, Any] = None) -> List[List[InlineKeyboardButton]]:
         """Create general action buttons"""

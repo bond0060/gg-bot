@@ -451,6 +451,30 @@ class MessageHandlers:
                     query, context, value, user_choice, user_name, chat_id
                 )
             
+            elif action == "quick_flight":
+                # User clicked quick flight search button
+                await self._handle_quick_flight_callback(
+                    query, context, user_name, chat_id
+                )
+            
+            elif action == "book_hotel":
+                # User clicked book hotel button
+                await self._handle_book_hotel_callback(
+                    query, context, user_name, chat_id
+                )
+            
+            elif action == "weather":
+                # User clicked weather button
+                await self._handle_weather_callback(
+                    query, context, user_name, chat_id
+                )
+            
+            elif action == "share_loc":
+                # User clicked share location button
+                await self._handle_share_location_callback(
+                    query, context, user_name, chat_id
+                )
+            
             # Try to remove the inline keyboard (optional)
             try:
                 await query.edit_message_reply_markup(reply_markup=None)
@@ -601,6 +625,14 @@ class MessageHandlers:
         chat_id = update.effective_chat.id
         user_name = update.effective_user.first_name or "User"
         
+        # Check if bot is mentioned in the message
+        bot_mentioned = self._is_bot_mentioned(update, context)
+        
+        # Only respond if bot is mentioned (except in private chats)
+        if chat_type != "private" and not bot_mentioned:
+            logger.info(f"Bot not mentioned in {chat_type} chat, ignoring message")
+            return
+        
         # Check if message contains URLs
         urls = re.findall(
             r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+',
@@ -665,13 +697,45 @@ class MessageHandlers:
                             parse_mode="Markdown"
                         )
             else:
-                # No follow-up questions, just send the main response
+                # No follow-up questions, check if we should add custom buttons
                 if response and response.strip():
-                    await update.message.reply_text(response, parse_mode="Markdown")
+                    # Check if this is a general travel query that could benefit from custom buttons
+                    if any(keyword in message_text.lower() for keyword in ["旅行", "旅游", "计划", "推荐", "帮助", "travel", "trip", "plan"]):
+                        # Add custom buttons for general travel assistance
+                        custom_keyboard = inline_keyboard_service.create_custom_buttons(
+                            chat_id, ["quick_flight", "book_hotel", "weather"]
+                        )
+                        
+                        if custom_keyboard:
+                            await update.message.reply_text(response, parse_mode="Markdown")
+                            await update.message.reply_text(
+                                "💡 *我还可以帮您：*",
+                                reply_markup=custom_keyboard,
+                                parse_mode="Markdown"
+                            )
+                        else:
+                            await update.message.reply_text(response, parse_mode="Markdown")
+                    
+                    # Check if this is a hotel query with destination - add hotel image
+                    elif any(keyword in message_text.lower() for keyword in ["酒店", "hotel", "住宿", "宾馆", "旅馆"]) and any(dest in message_text.lower() for dest in ["东京", "tokyo", "纽约", "new york", "巴黎", "paris", "伦敦", "london"]):
+                        await self._send_hotel_response_with_media(update, response, message_text, chat_id)
+                    else:
+                        await update.message.reply_text(response, parse_mode="Markdown")
                 else:
-                    # Fallback if no response and no questions
-                    fallback_text = f"Thanks for your message, {user_name}! I'm here to help with your travel planning."
-                    await update.message.reply_text(fallback_text)
+                    # No response generated, send a default message with custom buttons
+                    custom_keyboard = inline_keyboard_service.create_custom_buttons(
+                        chat_id, ["quick_flight", "book_hotel", "weather"]
+                    )
+                    
+                    if custom_keyboard:
+                        await update.message.reply_text(
+                            "🤔 我不太确定您想要什么帮助。让我为您提供一些选项：",
+                            reply_markup=custom_keyboard
+                        )
+                    else:
+                        await update.message.reply_text(
+                            "🤔 我不太确定您想要什么帮助。请告诉我您需要什么，我会尽力协助您！"
+                        )
             
         except Exception as e:
             logger.error(f"Error handling text message: {e}")
@@ -897,3 +961,196 @@ class MessageHandlers:
             await query.edit_message_text(
                 f"谢谢您的选择，{user_name}！如果您需要更多帮助，请随时告诉我。"
             )
+
+    async def _handle_quick_flight_callback(
+        self, 
+        query, 
+        context: ContextTypes.DEFAULT_TYPE, 
+        user_name: str, 
+        chat_id: int
+    ):
+        """Handle quick flight search button"""
+        try:
+            await query.edit_message_text(
+                f"✈️ 好的，{user_name}！我来帮您快速查询航班。\n\n"
+                "请告诉我：\n"
+                "1. 出发城市和目的地\n"
+                "2. 出发日期\n"
+                "3. 是否往返（如果是，请提供返程日期）\n\n"
+                "例如：'上海到纽约，10月1号出发，10月5号返回'"
+            )
+        except Exception as e:
+            logger.error(f"Error handling quick flight callback: {e}")
+
+    async def _handle_book_hotel_callback(
+        self, 
+        query, 
+        context: ContextTypes.DEFAULT_TYPE, 
+        user_name: str, 
+        chat_id: int
+    ):
+        """Handle book hotel button"""
+        try:
+            await query.edit_message_text(
+                f"🏨 好的，{user_name}！我来帮您预订酒店。\n\n"
+                "请告诉我：\n"
+                "1. 目的地城市\n"
+                "2. 入住和退房日期\n"
+                "3. 房间数量和客人数量\n"
+                "4. 预算范围（可选）\n\n"
+                "例如：'纽约，10月1号到10月5号，2个房间，4个客人'"
+            )
+        except Exception as e:
+            logger.error(f"Error handling book hotel callback: {e}")
+
+    async def _handle_weather_callback(
+        self, 
+        query, 
+        context: ContextTypes.DEFAULT_TYPE, 
+        user_name: str, 
+        chat_id: int
+    ):
+        """Handle weather button"""
+        try:
+            await query.edit_message_text(
+                f"🌤️ 好的，{user_name}！我来帮您查看天气信息。\n\n"
+                "请告诉我：\n"
+                "1. 您想查询哪个城市的天气？\n"
+                "2. 需要查看哪几天的天气？（可选）\n\n"
+                "例如：'纽约的天气' 或 '东京10月1号到10月5号的天气'"
+            )
+        except Exception as e:
+            logger.error(f"Error handling weather callback: {e}")
+
+    async def _handle_share_location_callback(
+        self, 
+        query, 
+        context: ContextTypes.DEFAULT_TYPE, 
+        user_name: str, 
+        chat_id: int
+    ):
+        """Handle share location button"""
+        try:
+            await query.edit_message_text(
+                f"📍 好的，{user_name}！\n\n"
+                "请分享您的位置，这样我可以：\n"
+                "• 为您推荐附近的景点和餐厅\n"
+                "• 提供当地的交通信息\n"
+                "• 查看您当前位置的天气\n"
+                "• 规划从您当前位置出发的路线\n\n"
+                "请点击Telegram的'分享位置'按钮发送您的位置。"
+            )
+        except Exception as e:
+            logger.error(f"Error handling share location callback: {e}")
+
+    async def _send_hotel_response_with_media(
+        self, 
+        update: Update, 
+        response: str, 
+        message_text: str, 
+        chat_id: int
+    ):
+        """Send hotel response with hotel image"""
+        try:
+            # Extract destination from message
+            destination = self._extract_destination_from_message(message_text)
+            
+            if destination:
+                # Get hotel media URLs for the destination
+                hotel_media_urls = self.llm_service.get_hotel_media_urls_for_destination(destination)
+                
+                # Send text response first
+                await update.message.reply_text(response, parse_mode="Markdown")
+                
+                # Send hotel image
+                await self.llm_service.send_media_with_text(
+                    bot=update.get_bot(),
+                    chat_id=chat_id,
+                    text="",  # No additional text
+                    media_type="photo",
+                    media_url=hotel_media_urls.get("photo"),
+                    caption=f"🏨 *{destination}的精选酒店* - 为您推荐优质住宿！",
+                    parse_mode="Markdown"
+                )
+            else:
+                # Fallback to regular text response
+                await update.message.reply_text(response, parse_mode="Markdown")
+                
+        except Exception as e:
+            logger.error(f"Error sending hotel response with media: {e}")
+            # Fallback to regular text response
+            await update.message.reply_text(response, parse_mode="Markdown")
+
+    def _extract_destination_from_message(self, message_text: str) -> str:
+        """Extract destination from message text"""
+        message_lower = message_text.lower()
+        
+        # Map of destination keywords to normalized names
+        destination_map = {
+            "东京": "tokyo",
+            "tokyo": "tokyo",
+            "纽约": "new_york", 
+            "new york": "new_york",
+            "巴黎": "paris",
+            "paris": "paris",
+            "伦敦": "london",
+            "london": "london",
+            "大阪": "osaka",
+            "osaka": "osaka",
+            "京都": "kyoto",
+            "kyoto": "kyoto",
+            "首尔": "seoul",
+            "seoul": "seoul",
+            "新加坡": "singapore",
+            "singapore": "singapore"
+        }
+        
+        for keyword, normalized_name in destination_map.items():
+            if keyword in message_lower:
+                return normalized_name
+        
+        return None
+
+    def _is_bot_mentioned(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+        """
+        Check if the bot is mentioned in the message
+        
+        Args:
+            update: Telegram update object
+            context: Bot context
+            
+        Returns:
+            bool: True if bot is mentioned, False otherwise
+        """
+        try:
+            message = update.message
+            if not message:
+                return False
+            
+            # Check for @mentions in the message text
+            if message.text:
+                # Get bot username
+                bot_username = context.bot.username
+                if bot_username:
+                    # Check for @bot_username in the message
+                    if f"@{bot_username}" in message.text:
+                        return True
+                
+                # Check for @all or @everyone (common group mentions)
+                if "@all" in message.text.lower() or "@everyone" in message.text.lower():
+                    return True
+            
+            # Check for entities (mentions, hashtags, etc.)
+            if message.entities:
+                for entity in message.entities:
+                    if entity.type == "mention":
+                        # Extract the mentioned username
+                        mentioned_username = message.text[entity.offset:entity.offset + entity.length]
+                        if mentioned_username == f"@{context.bot.username}":
+                            return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error checking bot mention: {e}")
+            return False

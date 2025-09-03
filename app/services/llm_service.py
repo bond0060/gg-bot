@@ -99,46 +99,80 @@ class LLMService:
             if flight_data:
                 system_prompt += f"\n\nReal-time flight data available:\n{flight_data}"
                 
-            # Add structured response format for flight queries
-            if "航班" in message or "flight" in message.lower() or "机票" in message:
+            # Check if this is a flight query without dates
+            flight_keywords = ["航班", "机票", "飞机", "flight", "airline", "airport"]
+            date_patterns = ["10月", "11月", "12月", "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "号", "日", "月"]
+            
+            message_lower = message.lower()
+            has_flight_keywords = any(keyword in message_lower for keyword in flight_keywords)
+            has_dates = any(pattern in message for pattern in date_patterns)
+            
+            if has_flight_keywords and not has_dates:
+                # Flight query without dates - ask for dates first
                 system_prompt += """
 
-CRITICAL INSTRUCTION - FLIGHT RESPONSE FORMAT
+IMPORTANT: The user is asking about flights but hasn't provided specific dates. You should ask for the travel dates first before providing flight options.
 
-You MUST respond using EXACTLY this format for flight queries. DO NOT deviate from this structure:
+Response format:
+I'd be happy to help you find flights! To provide you with the most accurate flight information, I need to know your travel dates.
 
-CRITICAL: Use ONLY the exact destinations and departure cities specified by the user. 
-- If user says "从上海到北海道", use 上海 as departure and 北海道 as destination
-- If user says "从北京到东京", use 北京 as departure and 东京 as destination  
-- NEVER substitute with other cities like Singapore, Seoul, etc.
-- NEVER change departure city (if user says 上海, don't use 北京 or other cities)
-- NEVER include booking links or reservation URLs in your response
+Please let me know:
+1. What date would you like to depart?
+2. Are you looking for a one-way ticket or round-trip? (If round-trip, please also provide your return date)
 
-方案A｜[航空公司]：[特点总结]
-去程：[航班号] ([出发机场代码] [起飞时间] → [到达机场代码] [到达时间])
-回程：[航班号] ([出发机场代码] [起飞时间] → [到达机场代码] [到达时间])
-价格：¥[价格区间]
+For example: "I'd like to depart on October 1st and return on October 5th" or "I need a one-way ticket for October 1st"
 
-方案B｜[航空公司]：[特点总结]
-去程：[航班号] ([出发机场代码] [起飞时间] → [到达机场代码] [到达时间])
-回程：[航班号] ([出发机场代码] [起飞时间] → [到达机场代码] [到达时间])
-价格：¥[价格区间]
+Once you provide the dates, I'll search for the best flight options for you!"""
+            elif has_flight_keywords and has_dates:
+                # Flight query with dates - provide flight options
+                system_prompt += """
 
-方案C｜[航空公司]：[特点总结]
-去程：[航班号] ([出发机场代码] [起飞时间] → [到达机场代码] [到达时间])
-回程：[航班号] ([出发机场代码] [起飞时间] → [到达机场代码] [到达时间])
-价格：¥[价格区间]
+CRITICAL: You are a flight information assistant. You MUST respond using EXACTLY this format. NO EMOJIS, NO DEVIATIONS, NO EXCEPTIONS.
+
+REQUIRED FORMAT (COPY EXACTLY):
+方案A｜中国东方航空：直飞，方便快捷
+去程：MU 501 (上海浦东国际机场（PVG） 09:00 → 大阪关西国际机场（KIX） 12:40)
+回程：MU 502 (大阪关西国际机场（KIX） 19:15 → 上海浦东国际机场（PVG） 22:00)
+价格：¥2800-3200
+
+方案B｜全日空：舒适服务，适合家庭
+去程：NH 968 (上海浦东国际机场（PVG） 10:20 → 大阪关西国际机场（KIX） 14:00)
+回程：NH 969 (大阪关西国际机场（KIX） 18:00 → 上海浦东国际机场（PVG） 21:00)
+价格：¥3000-3500
+
+方案C｜日本航空：优质航空体验
+去程：JL 123 (上海浦东国际机场（PVG） 11:15 → 大阪关西国际机场（KIX） 15:00)
+回程：JL 124 (大阪关西国际机场（KIX） 17:00 → 上海浦东国际机场（PVG） 20:00)
+价格：¥3200-3700
 
 关键信息
-• [重要特点1]
-• [重要特点2]
-• [重要特点3]
+• 所有航班都是直飞，适合带孩子出行
+• 回程时间都在晚上，避免红眼航班
+• 建议提前预订以获得更好价格
 
 我的建议
-1. [建议1] → 选 [航班组合]
-2. [建议2] → 选 [航班组合]
+1. 如果优先考虑价格，选方案A
+2. 如果注重服务品质，选方案B或C
 
-重要：必须提供3个不同方案，每个方案都要有具体的航班号、时间和价格区间。不要使用模糊的描述。"""
+ABSOLUTE REQUIREMENTS:
+- NO EMOJIS WHATSOEVER
+- Use ONLY the exact format above
+- Start each plan with "方案A｜", "方案B｜", "方案C｜" - NO EMOJIS
+- Include complete airport names with IATA codes in parentheses
+- Include specific times
+- Use realistic flight numbers
+- If you use ANY emoji, your response will be REJECTED
+
+FINAL WARNING: ABSOLUTELY NO EMOJIS ALLOWED
+YOUR RESPONSE MUST BE PLAIN TEXT ONLY
+NO EMOJIS WHATSOEVER
+IF YOU USE EMOJIS, YOUR RESPONSE WILL BE REJECTED
+PROVIDE COMPLETE FLIGHT INFORMATION, NOT "待确认"
+START EACH PLAN WITH "方案A｜", "方案B｜", "方案C｜" - NO EMOJIS
+EXAMPLE: 方案A｜中国东方航空：直飞，方便快捷
+
+IMPORTANT: Always end your response with a booking link:
+[在网页中选择和预订航班方案](https://www.skyscanner.com)"""
             
             # Build conversation messages with history
             messages = self._build_conversation_messages(message, context, message_type, system_prompt)
@@ -154,19 +188,19 @@ CRITICAL: Use ONLY the exact destinations and departure cities specified by the 
             
             generated_response = response.choices[0].message.content.strip()
             
-            # If it looks like a flight ABC options response, beautify formatting
-            if any(keyword in generated_response for keyword in ["方案A", "方案B", "方案C"]):
-                try:
-                    formatted = self._format_flight_options_response(
-                        generated_response,
-                        user_message=message,
-                        context=context
-                    )
-                    if formatted:
-                        generated_response = formatted
-                except Exception as _:
-                    # Fall back to original text on any formatting error
-                    pass
+            # Skip formatting for flight responses to preserve plain text format
+            # if any(keyword in generated_response for keyword in ["方案A", "方案B", "方案C"]):
+            #     try:
+            #         formatted = self._format_flight_options_response(
+            #             generated_response,
+            #             user_message=message,
+            #             context=context
+            #         )
+            #         if formatted:
+            #             generated_response = formatted
+            #     except Exception as _:
+            #         # Fall back to original text on any formatting error
+            #         pass
             logger.info("Successfully generated LLM response without follow-up")
             logger.info(f"Raw LLM response: {generated_response[:500]}...")
             
@@ -360,19 +394,27 @@ CRITICAL: Use ONLY the exact destinations and departure cities specified by the 
         # Add web page link for flight selection
         if result and any(keyword in result for keyword in ["方案A", "方案B", "方案C"]):
             logger.info(f"Generating web link for user message: {user_message}")
-            web_link = self._generate_flight_web_link(result, user_message, context)
-            if web_link:
-                logger.info(f"Generated web link: {web_link}")
-                result += f"\n\n🌐 [在网页中选择和预订航班方案]({web_link})"
-            else:
-                logger.info("Web link generation failed, using fallback")
-                # Generate a more specific fallback link based on the route
-                fallback_link = self._generate_fallback_booking_link(user_message, context, result)
-                if fallback_link:
-                    logger.info(f"Generated fallback link: {fallback_link}")
-                    result += f"\n\n🌐 [预订航班]({fallback_link})"
+            logger.info(f"Flight result text: {result[:200]}...")
+            try:
+                web_link = self._generate_flight_web_link(result, user_message, context)
+                if web_link:
+                    logger.info(f"Generated web link: {web_link}")
+                    result += f"\n\n[在网页中选择和预订航班方案]({web_link})"
                 else:
-                    logger.warning("Both web link and fallback link generation failed")
+                    logger.warning("Web link generation failed, using fallback")
+                    # Generate a more specific fallback link based on the route
+                    fallback_link = self._generate_fallback_booking_link(user_message, context, result)
+                    if fallback_link:
+                        logger.info(f"Generated fallback link: {fallback_link}")
+                        result += f"\n\n[预订航班]({fallback_link})"
+                    else:
+                        logger.warning("Both web link and fallback link generation failed")
+                        # Add a simple fallback link
+                        result += f"\n\n[预订航班](https://www.skyscanner.com)"
+            except Exception as e:
+                logger.error(f"Error in web link generation: {e}")
+                # Add a simple fallback link
+                result += f"\n\n[预订航班](https://www.skyscanner.com)"
         
         # Debug: log if we have no formatted content
         if not result:
@@ -1096,11 +1138,14 @@ Provide personalized travel recommendations."""
                 if hist_msg.content == current_message:
                     continue
                 
-                # For flight queries, skip previous flight responses to avoid duplication
+                # For flight queries, include previous flight responses to maintain context
+                # but only if the current message is asking for alternatives/recommendations
                 if is_flight_query and hist_msg.role == "assistant":
                     # Check if this assistant message contains flight plans
                     if ("方案A" in hist_msg.content or "方案B" in hist_msg.content or "方案C" in hist_msg.content):
-                        continue
+                        # Only skip if current message is not asking for alternatives
+                        if not any(word in current_message.lower() for word in ["再", "其他", "别的", "换", "重新", "推荐", "alternative", "other", "another"]):
+                            continue
                     
                 openai_message = {
                     "role": hist_msg.role,
@@ -1757,3 +1802,207 @@ Guidelines:
         except Exception as e:
             logger.error(f"Error generating LLM response: {e}")
             return "error"
+
+    async def send_media_with_text(
+        self, 
+        bot, 
+        chat_id: int, 
+        text: str, 
+        media_type: str = "photo", 
+        media_url: str = None, 
+        media_file_id: str = None,
+        caption: str = None,
+        parse_mode: str = "Markdown"
+    ) -> bool:
+        """
+        Send media (photo, video, document) with text
+        
+        Args:
+            bot: Telegram bot instance
+            chat_id: Chat ID to send to
+            text: Text message to send
+            media_type: Type of media ("photo", "video", "document", "animation")
+            media_url: URL of the media file
+            media_file_id: Telegram file ID of the media
+            caption: Caption for the media
+            parse_mode: Parse mode for text formatting
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # Send text message first
+            if text and text.strip():
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    parse_mode=parse_mode
+                )
+            
+            # Send media
+            if media_type == "photo":
+                if media_url:
+                    await bot.send_photo(
+                        chat_id=chat_id,
+                        photo=media_url,
+                        caption=caption,
+                        parse_mode=parse_mode
+                    )
+                elif media_file_id:
+                    await bot.send_photo(
+                        chat_id=chat_id,
+                        photo=media_file_id,
+                        caption=caption,
+                        parse_mode=parse_mode
+                    )
+            
+            elif media_type == "video":
+                if media_url:
+                    await bot.send_video(
+                        chat_id=chat_id,
+                        video=media_url,
+                        caption=caption,
+                        parse_mode=parse_mode
+                    )
+                elif media_file_id:
+                    await bot.send_video(
+                        chat_id=chat_id,
+                        video=media_file_id,
+                        caption=caption,
+                        parse_mode=parse_mode
+                    )
+            
+            elif media_type == "document":
+                if media_url:
+                    await bot.send_document(
+                        chat_id=chat_id,
+                        document=media_url,
+                        caption=caption,
+                        parse_mode=parse_mode
+                    )
+                elif media_file_id:
+                    await bot.send_document(
+                        chat_id=chat_id,
+                        document=media_file_id,
+                        caption=caption,
+                        parse_mode=parse_mode
+                    )
+            
+            elif media_type == "animation":
+                if media_url:
+                    await bot.send_animation(
+                        chat_id=chat_id,
+                        animation=media_url,
+                        caption=caption,
+                        parse_mode=parse_mode
+                    )
+                elif media_file_id:
+                    await bot.send_animation(
+                        chat_id=chat_id,
+                        animation=media_file_id,
+                        caption=caption,
+                        parse_mode=parse_mode
+                    )
+            
+            logger.info(f"Successfully sent {media_type} with text to chat {chat_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error sending media with text: {e}")
+            return False
+
+    def get_media_urls_for_destination(self, destination: str) -> dict:
+        """
+        Get media URLs for a specific destination
+        
+        Args:
+            destination: Destination name (e.g., "Tokyo", "Paris")
+        
+        Returns:
+            dict: Dictionary with media URLs for different types
+        """
+        # This is a placeholder - in a real implementation, you would:
+        # 1. Use an image API (like Unsplash, Pixabay, etc.)
+        # 2. Have a database of curated images
+        # 3. Use a travel API that provides images
+        
+        media_urls = {
+            "tokyo": {
+                "photo": "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800",
+                "video": "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4"
+            },
+            "paris": {
+                "photo": "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800",
+                "video": "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4"
+            },
+            "new_york": {
+                "photo": "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800",
+                "video": "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4"
+            },
+            "london": {
+                "photo": "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800",
+                "video": "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4"
+            }
+        }
+        
+        # Normalize destination name
+        dest_key = destination.lower().replace(" ", "_").replace("市", "").replace("市", "")
+        
+        return media_urls.get(dest_key, {
+            "photo": "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800",  # Default travel image
+            "video": "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4"
+        })
+
+    def get_hotel_media_urls_for_destination(self, destination: str) -> dict:
+        """
+        Get hotel media URLs for a specific destination
+        
+        Args:
+            destination: Destination name (e.g., "Tokyo", "Paris")
+        
+        Returns:
+            dict: Dictionary with hotel media URLs
+        """
+        # Hotel-specific images for different destinations
+        hotel_media_urls = {
+            "tokyo": {
+                "photo": "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",  # Tokyo hotel
+                "video": "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4"
+            },
+            "paris": {
+                "photo": "https://images.unsplash.com/photo-1564501049412-61c2a3083791?w=800",  # Paris hotel
+                "video": "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4"
+            },
+            "new_york": {
+                "photo": "https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=800",  # NYC hotel
+                "video": "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4"
+            },
+            "london": {
+                "photo": "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800",  # London hotel
+                "video": "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4"
+            },
+            "osaka": {
+                "photo": "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",  # Osaka hotel
+                "video": "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4"
+            },
+            "kyoto": {
+                "photo": "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",  # Kyoto hotel
+                "video": "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4"
+            },
+            "seoul": {
+                "photo": "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",  # Seoul hotel
+                "video": "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4"
+            },
+            "singapore": {
+                "photo": "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",  # Singapore hotel
+                "video": "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4"
+            }
+        }
+        
+        # Normalize destination name
+        dest_key = destination.lower().replace(" ", "_").replace("市", "").replace("市", "")
+        
+        return hotel_media_urls.get(dest_key, {
+            "photo": "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",  # Default hotel image
+            "video": "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4"
+        })
