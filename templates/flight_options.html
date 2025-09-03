@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>航班选择 - {{ flight_data.title or '航班查询结果' }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/flight_selector.css') }}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>✈️ 航班选择</h1>
+            <div class="route-info">
+                <span class="route">{{ flight_data.route or '航班查询结果' }}</span>
+                <span class="dates">{{ flight_data.dates or '' }}</span>
+            </div>
+        </header>
+        
+        <!-- Flight Route Map -->
+        <div class="map-container">
+            <div id="flight-map"></div>
+        </div>
+        
+        <div class="flight-options">
+            {% for plan in flight_data.plans %}
+            <div class="flight-card" data-plan="{{ plan.code }}">
+                <div class="card-header">
+                    <div class="plan-badge plan-{{ plan.code.lower() }}">
+                        {{ plan.emoji }} 方案{{ plan.code }}
+                    </div>
+                    <div class="airline-info">
+                        <h3>{{ plan.airline }}</h3>
+                        <p>{{ plan.description }}</p>
+                    </div>
+                </div>
+                
+                <div class="flight-details">
+                    <!-- Outbound Flight -->
+                    <div class="flight-segment">
+                        <div class="segment-header">
+                            <span class="segment-label">🛫 去程</span>
+                            <span class="segment-date">{{ plan.outbound.date }}</span>
+                        </div>
+                        <div class="flight-info">
+                            <div class="departure">
+                                <div class="time">{{ plan.outbound.departure_time }}</div>
+                                <div class="airport">{{ plan.outbound.departure_airport }}</div>
+                                <div class="airport-code">({{ plan.outbound.departure_code }})</div>
+                            </div>
+                            <div class="flight-arrow">
+                                <div class="duration">{{ plan.outbound.duration }}</div>
+                                <div class="arrow">→</div>
+                            </div>
+                            <div class="arrival">
+                                <div class="time">{{ plan.outbound.arrival_time }}</div>
+                                <div class="airport">{{ plan.outbound.arrival_airport }}</div>
+                                <div class="airport-code">({{ plan.outbound.arrival_code }})</div>
+                            </div>
+                        </div>
+                        <div class="flight-number">{{ plan.outbound.flight_number }}</div>
+                    </div>
+                    
+                    <!-- Inbound Flight -->
+                    <div class="flight-segment">
+                        <div class="segment-header">
+                            <span class="segment-label">🛬 回程</span>
+                            <span class="segment-date">{{ plan.inbound.date }}</span>
+                        </div>
+                        <div class="flight-info">
+                            <div class="departure">
+                                <div class="time">{{ plan.inbound.departure_time }}</div>
+                                <div class="airport">{{ plan.inbound.departure_airport }}</div>
+                                <div class="airport-code">({{ plan.inbound.departure_code }})</div>
+                            </div>
+                            <div class="flight-arrow">
+                                <div class="duration">{{ plan.inbound.duration }}</div>
+                                <div class="arrow">→</div>
+                            </div>
+                            <div class="arrival">
+                                <div class="time">{{ plan.inbound.arrival_time }}</div>
+                                <div class="airport">{{ plan.inbound.arrival_airport }}</div>
+                                <div class="airport-code">({{ plan.inbound.arrival_code }})</div>
+                            </div>
+                        </div>
+                        <div class="flight-number">{{ plan.inbound.flight_number }}</div>
+                    </div>
+                </div>
+                
+                <div class="card-footer">
+                    <div class="price-info">
+                        <div class="price">¥{{ plan.price }}</div>
+                        <div class="price-note">{{ plan.price_note }}</div>
+                    </div>
+                    <button class="select-btn" onclick="selectFlight('{{ plan.code }}')">
+                        🎯 选择并预订此方案
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        {% if flight_data.key_points %}
+        <div class="key-info">
+            <h3>📌 关键信息</h3>
+            <ul>
+                {% for point in flight_data.key_points %}
+                <li>{{ point }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        
+        {% if flight_data.suggestions %}
+        <div class="suggestions">
+            <h3>🧭 我的建议</h3>
+            <ol>
+                {% for suggestion in flight_data.suggestions %}
+                <li>{{ suggestion }}</li>
+                {% endfor %}
+            </ol>
+        </div>
+        {% endif %}
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/flight_selector.js') }}"></script>
+    <script>
+        // Flight route data
+        const flightData = {
+            route: "{{ flight_data.route or '航班查询结果' }}",
+            departure: "{{ flight_data.departure or '上海' }}",
+            destination: "{{ flight_data.destination or '东京' }}",
+            departureCode: "{{ flight_data.departure_code or 'PVG' }}",
+            destinationCode: "{{ flight_data.destination_code or 'NRT' }}"
+        };
+        
+        // Airport coordinates mapping
+        const airportCoordinates = {
+            'PVG': { lat: 31.1434, lng: 121.8052, name: '上海浦东国际机场' },
+            'SHA': { lat: 31.1979, lng: 121.3363, name: '上海虹桥国际机场' },
+            'NRT': { lat: 35.7720, lng: 140.3928, name: '东京成田国际机场' },
+            'HND': { lat: 35.5494, lng: 139.7798, name: '东京羽田机场' },
+            'KIX': { lat: 34.4348, lng: 135.2442, name: '大阪关西国际机场' },
+            'CTS': { lat: 43.0642, lng: 141.3469, name: '札幌新千岁机场' },
+            'PEK': { lat: 39.9042, lng: 116.4074, name: '北京首都国际机场' },
+            'PKX': { lat: 39.5098, lng: 116.4109, name: '北京大兴国际机场' }
+        };
+        
+        let map;
+        
+        // Create custom airplane icons
+        const departureIcon = L.divIcon({
+            html: `
+                <div style="
+                    background: #4285F4;
+                    border: 2px solid white;
+                    border-radius: 50%;
+                    width: 30px;
+                    height: 30px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                ">
+                    <span style="color: white; font-size: 16px;">✈</span>
+                </div>
+            `,
+            className: 'custom-div-icon',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+        });
+        
+        const destinationIcon = L.divIcon({
+            html: `
+                <div style="
+                    background: #EA4335;
+                    border: 2px solid white;
+                    border-radius: 50%;
+                    width: 30px;
+                    height: 30px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                ">
+                    <span style="color: white; font-size: 16px;">✈</span>
+                </div>
+            `,
+            className: 'custom-div-icon',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+        });
+        
+        function initMap() {
+            // Get departure and destination coordinates
+            const departure = airportCoordinates[flightData.departureCode] || 
+                            airportCoordinates['PVG'];
+            const destination = airportCoordinates[flightData.destinationCode] || 
+                              airportCoordinates['NRT'];
+            
+            // Calculate center point
+            const centerLat = (departure.lat + destination.lat) / 2;
+            const centerLng = (departure.lng + destination.lng) / 2;
+            
+            // Initialize map
+            map = L.map('flight-map').setView([centerLat, centerLng], 5);
+            
+            // Add tile layer
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 18
+            }).addTo(map);
+            
+            // Add departure marker
+            const departureMarker = L.marker([departure.lat, departure.lng], {
+                icon: departureIcon
+            }).addTo(map);
+            
+            // Add destination marker
+            const destinationMarker = L.marker([destination.lat, destination.lng], {
+                icon: destinationIcon
+            }).addTo(map);
+            
+            // Add flight path
+            const flightPath = L.polyline([
+                [departure.lat, departure.lng],
+                [destination.lat, destination.lng]
+            ], {
+                color: '#FF6B6B',
+                weight: 4,
+                opacity: 0.8,
+                dashArray: '10, 10'
+            }).addTo(map);
+            
+            // Add popups
+            departureMarker.bindPopup(`
+                <div style="padding: 8px; text-align: center;">
+                    <strong>${departure.name}</strong><br>
+                    <span style="color: #666; font-size: 12px;">出发地</span>
+                </div>
+            `);
+            
+            destinationMarker.bindPopup(`
+                <div style="padding: 8px; text-align: center;">
+                    <strong>${destination.name}</strong><br>
+                    <span style="color: #666; font-size: 12px;">目的地</span>
+                </div>
+            `);
+            
+            // Fit map to show both markers
+            const group = new L.featureGroup([departureMarker, destinationMarker]);
+            map.fitBounds(group.getBounds().pad(0.1));
+            
+            // Limit zoom level
+            map.setMaxZoom(10);
+        }
+        
+        // Initialize map when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initMap();
+        });
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (map) {
+                setTimeout(() => {
+                    map.invalidateSize();
+                }, 100);
+            }
+        });
+    </script>
+    <script>
+        const flightId = '{{ flight_id }}';
+        
+        function selectFlight(planCode) {
+            fetch(`/api/flights/${flightId}/select`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ plan: planCode })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert(`✅ 已选择方案${planCode}！\n\n下一步将跳转到预订页面，请完成预订流程。\n\n${data.message}`);
+                    // Here you would redirect to booking system
+                    // For now, we'll show a booking form or redirect to external booking site
+                    showBookingForm(planCode);
+                } else {
+                    alert('❌ 选择失败，请重试');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('选择失败，请重试');
+            });
+        }
+        
+        function showBookingForm(planCode) {
+            // Create a booking form modal
+            const modal = document.createElement('div');
+            modal.className = 'booking-modal';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>🎯 预订方案${planCode}</h2>
+                        <span class="close" onclick="closeBookingForm()">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <p>您已选择方案${planCode}，请填写预订信息：</p>
+                        <form id="bookingForm">
+                            <div class="form-group">
+                                <label>乘客姓名：</label>
+                                <input type="text" name="passenger_name" required>
+                            </div>
+                            <div class="form-group">
+                                <label>联系电话：</label>
+                                <input type="tel" name="phone" required>
+                            </div>
+                            <div class="form-group">
+                                <label>邮箱地址：</label>
+                                <input type="email" name="email" required>
+                            </div>
+                            <div class="form-group">
+                                <label>特殊需求：</label>
+                                <textarea name="special_requests" placeholder="如：儿童餐、轮椅服务等"></textarea>
+                            </div>
+                            <div class="form-actions">
+                                <button type="button" onclick="closeBookingForm()" class="btn-cancel">取消</button>
+                                <button type="submit" class="btn-confirm">确认预订</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // Handle form submission
+            document.getElementById('bookingForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const formData = new FormData(this);
+                const bookingData = Object.fromEntries(formData);
+                
+                // Here you would send the booking data to your booking system
+                alert(`✅ 预订信息已提交！\n\n方案：${planCode}\n乘客：${bookingData.passenger_name}\n电话：${bookingData.phone}\n\n我们将在24小时内联系您确认预订详情。`);
+                closeBookingForm();
+            });
+        }
+        
+        function closeBookingForm() {
+            const modal = document.querySelector('.booking-modal');
+            if (modal) {
+                modal.remove();
+            }
+        }
+    </script>
+    
+    <style>
+        .booking-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-header h2 {
+            margin: 0;
+            color: #2c3e50;
+        }
+        
+        .close {
+            font-size: 24px;
+            cursor: pointer;
+            color: #7f8c8d;
+        }
+        
+        .close:hover {
+            color: #e74c3c;
+        }
+        
+        .modal-body {
+            padding: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .form-group textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+        
+        .btn-cancel,
+        .btn-confirm {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        .btn-cancel {
+            background: #95a5a6;
+            color: white;
+        }
+        
+        .btn-confirm {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .btn-cancel:hover {
+            background: #7f8c8d;
+        }
+        
+        .btn-confirm:hover {
+            background: #229954;
+        }
+    </style>
+</body>
+</html>

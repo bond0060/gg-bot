@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地图测试</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .map-container {
+            margin: 20px 0;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            background: white;
+        }
+        #flight-map {
+            width: 100%;
+            height: 300px;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>航班路线地图测试</h1>
+    
+    <div class="map-container">
+        <div id="flight-map"></div>
+    </div>
+    
+    <script>
+        // Flight route data
+        const flightData = {
+            departure: "上海",
+            destination: "东京",
+            departureCode: "PVG",
+            destinationCode: "NRT"
+        };
+        
+        // Airport coordinates mapping
+        const airportCoordinates = {
+            'PVG': { lat: 31.1434, lng: 121.8052, name: '上海浦东国际机场' },
+            'NRT': { lat: 35.7720, lng: 140.3928, name: '东京成田国际机场' }
+        };
+        
+        let map;
+        
+        // Create custom airplane icons
+        const departureIcon = L.divIcon({
+            html: `
+                <div style="
+                    background: #4285F4;
+                    border: 2px solid white;
+                    border-radius: 50%;
+                    width: 30px;
+                    height: 30px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                ">
+                    <span style="color: white; font-size: 16px;">✈</span>
+                </div>
+            `,
+            className: 'custom-div-icon',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+        });
+        
+        const destinationIcon = L.divIcon({
+            html: `
+                <div style="
+                    background: #EA4335;
+                    border: 2px solid white;
+                    border-radius: 50%;
+                    width: 30px;
+                    height: 30px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                ">
+                    <span style="color: white; font-size: 16px;">✈</span>
+                </div>
+            `,
+            className: 'custom-div-icon',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+        });
+        
+        function initMap() {
+            // Get departure and destination coordinates
+            const departure = airportCoordinates[flightData.departureCode];
+            const destination = airportCoordinates[flightData.destinationCode];
+            
+            // Calculate center point
+            const centerLat = (departure.lat + destination.lat) / 2;
+            const centerLng = (departure.lng + destination.lng) / 2;
+            
+            // Initialize map
+            map = L.map('flight-map').setView([centerLat, centerLng], 5);
+            
+            // Add tile layer
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 18
+            }).addTo(map);
+            
+            // Add departure marker
+            const departureMarker = L.marker([departure.lat, departure.lng], {
+                icon: departureIcon
+            }).addTo(map);
+            
+            // Add destination marker
+            const destinationMarker = L.marker([destination.lat, destination.lng], {
+                icon: destinationIcon
+            }).addTo(map);
+            
+            // Add flight path
+            const flightPath = L.polyline([
+                [departure.lat, departure.lng],
+                [destination.lat, destination.lng]
+            ], {
+                color: '#FF6B6B',
+                weight: 4,
+                opacity: 0.8,
+                dashArray: '10, 10'
+            }).addTo(map);
+            
+            // Add popups
+            departureMarker.bindPopup(`
+                <div style="padding: 8px; text-align: center;">
+                    <strong>${departure.name}</strong><br>
+                    <span style="color: #666; font-size: 12px;">出发地</span>
+                </div>
+            `);
+            
+            destinationMarker.bindPopup(`
+                <div style="padding: 8px; text-align: center;">
+                    <strong>${destination.name}</strong><br>
+                    <span style="color: #666; font-size: 12px;">目的地</span>
+                </div>
+            `);
+            
+            // Fit map to show both markers
+            const group = new L.featureGroup([departureMarker, destinationMarker]);
+            map.fitBounds(group.getBounds().pad(0.1));
+            
+            // Limit zoom level
+            map.setMaxZoom(10);
+        }
+        
+        // Initialize map when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initMap();
+        });
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (map) {
+                setTimeout(() => {
+                    map.invalidateSize();
+                }, 100);
+            }
+        });
+    </script>
+</body>
+</html>
+
