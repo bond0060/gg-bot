@@ -749,6 +749,7 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
                     # End of current segment, parse it
                     if current_segment_lines:
                         segment_text = '\n'.join(current_segment_lines)
+                        logger.info(f"Parsing {current_segment_type} segment: {segment_text}")
                         if current_segment_type == 'outbound':
                             current_plan['outbound'] = self._parse_flight_segment(segment_text)
                         elif current_segment_type == 'inbound':
@@ -795,6 +796,8 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
     def _parse_flight_segment(self, text: str) -> Dict[str, str]:
         """Parse a flight segment text (can be multi-line) into structured data"""
         import re
+        
+        logger.info(f"Parsing flight segment text: {text}")
         
         # Initialize with default values
         result = {
@@ -856,6 +859,7 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
         except Exception as e:
             logger.error(f"Error parsing flight segment: {e}")
         
+        logger.info(f"Parsed flight segment result: {result}")
         return result
 
     def _build_user_requirement_summary(self, user_message: Optional[str], context: Optional[Dict[str, Any]]) -> str:
