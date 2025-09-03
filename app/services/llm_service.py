@@ -103,7 +103,7 @@ class LLMService:
             if "航班" in message or "flight" in message.lower() or "机票" in message:
                 system_prompt += """
 
-🚨 CRITICAL INSTRUCTION - FLIGHT RESPONSE FORMAT 🚨
+CRITICAL INSTRUCTION - FLIGHT RESPONSE FORMAT
 
 You MUST respond using EXACTLY this format for flight queries. DO NOT deviate from this structure:
 
@@ -114,37 +114,31 @@ CRITICAL: Use ONLY the exact destinations and departure cities specified by the 
 - NEVER change departure city (if user says 上海, don't use 北京 or other cities)
 - NEVER include booking links or reservation URLs in your response
 
-方案A｜[航空公司] [特点总结]
-去程 [日期]：[航班号] [出发机场全名]（[IATA代码]） [起飞时间] → [到达机场全名]（[IATA代码]） [到达时间]
-回程 [日期]：[航班号] [出发机场全名]（[IATA代码]） [起飞时间] → [到达机场全名]（[IATA代码]） [到达时间]
-近期参考总价（经济舱/成人）：¥[价格区间]（[价格说明]）
+方案A｜[航空公司]：[特点总结]
+去程：[航班号] ([出发机场代码] [起飞时间] → [到达机场代码] [到达时间])
+回程：[航班号] ([出发机场代码] [起飞时间] → [到达机场代码] [到达时间])
+价格：¥[价格区间]
 
-IMPORTANT: Always include FULL airport names with IATA codes. Examples:
-- 上海浦东国际机场（PVG）
-- 东京成田国际机场（NRT）
-- 东京羽田机场（HND）
-- 札幌新千岁机场（CTS）
+方案B｜[航空公司]：[特点总结]
+去程：[航班号] ([出发机场代码] [起飞时间] → [到达机场代码] [到达时间])
+回程：[航班号] ([出发机场代码] [起飞时间] → [到达机场代码] [到达时间])
+价格：¥[价格区间]
 
-方案B｜[航空公司] [特点总结]
-去程 [日期]：[航班号] [出发机场全名]（[IATA代码]） [起飞时间] → [到达机场全名]（[IATA代码]） [到达时间]
-回程 [日期]：[航班号] [出发机场全名]（[IATA代码]） [起飞时间] → [到达机场全名]（[IATA代码]） [到达时间]
-近期参考总价（经济舱/成人）：¥[价格区间]（[价格说明]）
+方案C｜[航空公司]：[特点总结]
+去程：[航班号] ([出发机场代码] [起飞时间] → [到达机场代码] [到达时间])
+回程：[航班号] ([出发机场代码] [起飞时间] → [到达机场代码] [到达时间])
+价格：¥[价格区间]
 
-方案C｜[航空公司] [特点总结]
-去程 [日期]：[航班号] [出发机场全名]（[IATA代码]） [起飞时间] → [到达机场全名]（[IATA代码]） [到达时间]
-回程 [日期]：[航班号] [出发机场全名]（[IATA代码]） [起飞时间] → [到达机场全名]（[IATA代码]） [到达时间]
-近期参考总价（经济舱/成人）：¥[价格区间]（[价格说明]）
-
-关键信息（直说）
+关键信息
 • [重要特点1]
 • [重要特点2]
 • [重要特点3]
 
-我的建议（带孩子优先级）
+我的建议
 1. [建议1] → 选 [航班组合]
 2. [建议2] → 选 [航班组合]
 
-⚠️ 重要：必须提供3个不同方案，每个方案都要有具体的航班号、时间和价格区间。不要使用模糊的描述。"""
+重要：必须提供3个不同方案，每个方案都要有具体的航班号、时间和价格区间。不要使用模糊的描述。"""
             
             # Build conversation messages with history
             messages = self._build_conversation_messages(message, context, message_type, system_prompt)
