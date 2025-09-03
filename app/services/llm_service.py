@@ -806,6 +806,7 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
         # Parse the last segment if exists
         if current_plan and current_segment_type and current_segment_lines:
             segment_text = '\n'.join(current_segment_lines)
+            logger.info(f"Parsing final {current_segment_type} segment: {segment_text}")
             if current_segment_type == 'outbound':
                 current_plan['outbound'] = self._parse_flight_segment(segment_text)
             elif current_segment_type == 'inbound':
