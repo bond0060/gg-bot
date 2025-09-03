@@ -129,10 +129,10 @@
         // Flight route data
         const flightData = {
             route: "{{ flight_data.route or '航班查询结果' }}",
-            departure: "{{ flight_data.departure or '上海' }}",
-            destination: "{{ flight_data.destination or '东京' }}",
-            departureCode: "{{ flight_data.departure_code or 'PVG' }}",
-            destinationCode: "{{ flight_data.destination_code or 'NRT' }}"
+            departure: "{{ flight_data.departure or '' }}",
+            destination: "{{ flight_data.destination or '' }}",
+            departureCode: "{{ flight_data.departure_code or '' }}",
+            destinationCode: "{{ flight_data.destination_code or '' }}"
         };
         
         // Airport coordinates mapping
@@ -144,7 +144,12 @@
             'KIX': { lat: 34.4348, lng: 135.2442, name: '大阪关西国际机场' },
             'CTS': { lat: 43.0642, lng: 141.3469, name: '札幌新千岁机场' },
             'PEK': { lat: 39.9042, lng: 116.4074, name: '北京首都国际机场' },
-            'PKX': { lat: 39.5098, lng: 116.4109, name: '北京大兴国际机场' }
+            'PKX': { lat: 39.5098, lng: 116.4109, name: '北京大兴国际机场' },
+            'SIN': { lat: 1.3644, lng: 103.9915, name: '新加坡樟宜机场' },
+            'ICN': { lat: 37.4602, lng: 126.4407, name: '首尔仁川国际机场' },
+            'BKK': { lat: 13.6900, lng: 100.7501, name: '曼谷素万那普机场' },
+            'HKG': { lat: 22.3080, lng: 113.9185, name: '香港国际机场' },
+            'TPE': { lat: 25.0777, lng: 121.2328, name: '台北桃园国际机场' }
         };
         
         let map;
@@ -193,11 +198,20 @@
         });
         
         function initMap() {
+            // Validate flight data
+            if (!flightData.departureCode || !flightData.destinationCode) {
+                console.error('Missing departure or destination airport codes');
+                return;
+            }
+            
             // Get departure and destination coordinates
-            const departure = airportCoordinates[flightData.departureCode] || 
-                            airportCoordinates['PVG'];
-            const destination = airportCoordinates[flightData.destinationCode] || 
-                              airportCoordinates['NRT'];
+            const departure = airportCoordinates[flightData.departureCode];
+            const destination = airportCoordinates[flightData.destinationCode];
+            
+            if (!departure || !destination) {
+                console.error('Airport coordinates not found for:', flightData.departureCode, flightData.destinationCode);
+                return;
+            }
             
             // Calculate center point
             const centerLat = (departure.lat + destination.lat) / 2;
