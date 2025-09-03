@@ -745,15 +745,14 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
             
             elif current_plan and current_segment_type and line and not line.startswith('🅰️') and not line.startswith('🅱️') and not line.startswith('🅲️'):
                 # Collect lines for current segment until we hit next segment or end
-                if line.startswith('→') or '（' in line and '）' in line:
-                    current_segment_lines.append(line)
-                elif line.startswith('🛫') or line.startswith('🛬') or line.startswith('💰'):
+                if line.startswith('🛫') or line.startswith('🛬') or line.startswith('💰'):
                     # End of current segment, parse it
-                    segment_text = '\n'.join(current_segment_lines)
-                    if current_segment_type == 'outbound':
-                        current_plan['outbound'] = self._parse_flight_segment(segment_text)
-                    elif current_segment_type == 'inbound':
-                        current_plan['inbound'] = self._parse_flight_segment(segment_text)
+                    if current_segment_lines:
+                        segment_text = '\n'.join(current_segment_lines)
+                        if current_segment_type == 'outbound':
+                            current_plan['outbound'] = self._parse_flight_segment(segment_text)
+                        elif current_segment_type == 'inbound':
+                            current_plan['inbound'] = self._parse_flight_segment(segment_text)
                     
                     # Start new segment
                     if line.startswith('🛫'):
@@ -766,6 +765,7 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
                         current_segment_type = None
                         current_segment_lines = []
                 else:
+                    # Collect all lines that belong to current segment
                     current_segment_lines.append(line)
         
         # Parse the last segment if exists
