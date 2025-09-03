@@ -373,7 +373,7 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
             else:
                 logger.info("Web link generation failed, using fallback")
                 # Generate a more specific fallback link based on the route
-                fallback_link = self._generate_fallback_booking_link(user_message, context)
+                fallback_link = self._generate_fallback_booking_link(user_message, context, result)
                 if fallback_link:
                     logger.info(f"Generated fallback link: {fallback_link}")
                     result += f"\n\n🌐 [预订航班]({fallback_link})"
@@ -413,29 +413,46 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
         
         return None
 
-    def _generate_fallback_booking_link(self, user_message: Optional[str], context: Optional[Dict[str, Any]]) -> Optional[str]:
+    def _generate_fallback_booking_link(self, user_message: Optional[str], context: Optional[Dict[str, Any]], flight_text: Optional[str] = None) -> Optional[str]:
         """Generate a fallback booking link when web generation fails"""
-        if not user_message:
+        if not user_message and not flight_text:
             return None
             
         # Extract route information
         departure = "上海"
         destination = "东京"
         
-        # Try to extract route from user message
-        import re
-        route_patterns = [
-            r'从\s*([^到]+?)\s*到\s*([^，。\s]+)',
-            r'([^到]+?)\s*到\s*([^，。\s]+)',
-            r'([^飞]+?)\s*飞\s*([^，。\s]+)'
-        ]
+        # First try to extract from flight text if available
+        if flight_text:
+            import re
+            # Look for airport patterns in flight text
+            airport_pattern = r'([^（]+)（([A-Z]{3})）\s*[→→]\s*([^（]+)（([A-Z]{3})）'
+            
+            for line in flight_text.split('\n'):
+                match = re.search(airport_pattern, line)
+                if match:
+                    departure_airport = match.group(1).strip()
+                    destination_airport = match.group(3).strip()
+                    
+                    departure = self._extract_city_from_airport(departure_airport)
+                    destination = self._extract_city_from_airport(destination_airport)
+                    break
         
-        for pattern in route_patterns:
-            match = re.search(pattern, user_message)
-            if match:
-                departure = match.group(1).strip()
-                destination = match.group(2).strip()
-                break
+        # If no route found in flight text, try user message
+        if departure == "上海" and destination == "东京" and user_message:
+            import re
+            route_patterns = [
+                r'从\s*([^到]+?)\s*到\s*([^，。\s]+)',
+                r'([^到]+?)\s*到\s*([^，。\s]+)',
+                r'([^飞]+?)\s*飞\s*([^，。\s]+)'
+            ]
+            
+            for pattern in route_patterns:
+                match = re.search(pattern, user_message)
+                if match:
+                    departure = match.group(1).strip()
+                    destination = match.group(2).strip()
+                    break
         
         # Map city names to English for search
         city_mapping = {
@@ -462,11 +479,43 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
         
         return amadeus_link
 
+    def _extract_city_from_airport(self, airport_name: str) -> str:
+        """Extract city name from airport name"""
+        # Map airport names to cities
+        airport_to_city = {
+            '上海浦东国际机场': '上海',
+            '上海虹桥国际机场': '上海',
+            '北京首都国际机场': '北京',
+            '北京大兴国际机场': '北京',
+            '深圳宝安国际机场': '深圳',
+            '广州白云国际机场': '广州',
+            '东京成田国际机场': '东京',
+            '东京羽田机场': '东京',
+            '大阪关西国际机场': '大阪',
+            '札幌新千岁机场': '札幌',
+            '首尔仁川国际机场': '首尔',
+            '新加坡樟宜机场': '新加坡',
+            '香港国际机场': '香港',
+            '台北桃园国际机场': '台北'
+        }
+        
+        # Try exact match first
+        if airport_name in airport_to_city:
+            return airport_to_city[airport_name]
+        
+        # Try partial match
+        for airport, city in airport_to_city.items():
+            if airport in airport_name or airport_name in airport:
+                return city
+        
+        # Fallback: extract first few characters as city name
+        return airport_name[:2] if len(airport_name) >= 2 else airport_name
+
     def _parse_flight_data_for_web(self, flight_text: str, user_message: Optional[str], context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """Parse flight text into structured data for web display"""
         lines = flight_text.split('\n')
         
-        # Extract basic info
+        # Extract route information from flight text dynamically
         route = "航班查询结果"
         dates = ""
         departure = "上海"
@@ -474,68 +523,55 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
         departure_code = "PVG"
         destination_code = "NRT"
         
-        if user_message:
-            # Extract route from user message
-            if "上海" in user_message and "东京" in user_message:
-                route = "上海 → 东京"
-                departure = "上海"
-                destination = "东京"
-                departure_code = "PVG"
-                destination_code = "NRT"
-            elif "上海" in user_message and "北海道" in user_message:
-                route = "上海 → 北海道"
-                departure = "上海"
-                destination = "北海道"
-                departure_code = "PVG"
-                destination_code = "CTS"
-            elif "上海" in user_message and "深圳" in user_message:
-                route = "上海 → 深圳"
-                departure = "上海"
-                destination = "深圳"
-                departure_code = "PVG"
-                destination_code = "SZX"
-            elif "上海" in user_message and "大阪" in user_message:
-                route = "上海 → 大阪"
-                departure = "上海"
-                destination = "大阪"
-                departure_code = "PVG"
-                destination_code = "KIX"
-            elif "北京" in user_message and "东京" in user_message:
-                route = "北京 → 东京"
-                departure = "北京"
-                destination = "东京"
-                departure_code = "PEK"
-                destination_code = "NRT"
-            else:
-                # Try to extract route dynamically from user message
-                import re
-                # Look for patterns like "从X到Y" or "X到Y" or "X飞Y"
-                route_patterns = [
-                    r'从\s*([^到]+?)\s*到\s*([^，。\s]+)',
-                    r'([^到]+?)\s*到\s*([^，。\s]+)',
-                    r'([^飞]+?)\s*飞\s*([^，。\s]+)'
-                ]
+        # Parse route from flight text (look for airport patterns)
+        import re
+        
+        # Look for airport patterns in flight text like "上海浦东国际机场（PVG）" → "东京成田国际机场（NRT）"
+        airport_pattern = r'([^（]+)（([A-Z]{3})）\s*[→→]\s*([^（]+)（([A-Z]{3})）'
+        
+        for line in lines:
+            match = re.search(airport_pattern, line)
+            if match:
+                departure_airport = match.group(1).strip()
+                departure_code = match.group(2)
+                destination_airport = match.group(3).strip()
+                destination_code = match.group(4)
                 
-                for pattern in route_patterns:
-                    match = re.search(pattern, user_message)
-                    if match:
-                        departure_city = match.group(1).strip()
-                        destination_city = match.group(2).strip()
-                        
-                        # Map city names to codes
-                        city_codes = {
-                            '上海': 'PVG', '北京': 'PEK', '深圳': 'SZX', '广州': 'CAN',
-                            '东京': 'NRT', '大阪': 'KIX', '北海道': 'CTS', '札幌': 'CTS',
-                            '首尔': 'ICN', '新加坡': 'SIN', '香港': 'HKG', '台北': 'TPE'
-                        }
-                        
-                        departure_code = city_codes.get(departure_city, 'PVG')
-                        destination_code = city_codes.get(destination_city, 'NRT')
-                        
-                        route = f"{departure_city} → {destination_city}"
-                        departure = departure_city
-                        destination = destination_city
-                        break
+                # Extract city names from airport names
+                departure = self._extract_city_from_airport(departure_airport)
+                destination = self._extract_city_from_airport(destination_airport)
+                
+                route = f"{departure} → {destination}"
+                break
+        
+        # If no airport pattern found, try to extract from user message
+        if route == "航班查询结果" and user_message:
+            route_patterns = [
+                r'从\s*([^到]+?)\s*到\s*([^，。\s]+)',
+                r'([^到]+?)\s*到\s*([^，。\s]+)',
+                r'([^飞]+?)\s*飞\s*([^，。\s]+)'
+            ]
+            
+            for pattern in route_patterns:
+                match = re.search(pattern, user_message)
+                if match:
+                    departure_city = match.group(1).strip()
+                    destination_city = match.group(2).strip()
+                    
+                    # Map city names to codes
+                    city_codes = {
+                        '上海': 'PVG', '北京': 'PEK', '深圳': 'SZX', '广州': 'CAN',
+                        '东京': 'NRT', '大阪': 'KIX', '北海道': 'CTS', '札幌': 'CTS',
+                        '首尔': 'ICN', '新加坡': 'SIN', '香港': 'HKG', '台北': 'TPE'
+                    }
+                    
+                    departure_code = city_codes.get(departure_city, 'PVG')
+                    destination_code = city_codes.get(destination_city, 'NRT')
+                    
+                    route = f"{departure_city} → {destination_city}"
+                    departure = departure_city
+                    destination = destination_city
+                    break
             
             # Extract dates
             import re
