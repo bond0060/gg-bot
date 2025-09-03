@@ -518,6 +518,22 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
         """Extract city name from airport name using intelligent parsing"""
         import re
         
+        # First try specific airport mappings for common airports (before any processing)
+        airport_mappings = {
+            '上海浦东国际机场': '上海',
+            '上海虹桥国际机场': '上海', 
+            '新加坡樟宜国际机场': '新加坡',
+            '新加坡樟宜机场': '新加坡',
+            '东京成田国际机场': '东京',
+            '东京羽田机场': '东京',
+            '大阪关西国际机场': '大阪',
+            '大阪伊丹机场': '大阪',
+        }
+        
+        for mapped_airport, city_name in airport_mappings.items():
+            if mapped_airport in airport_name:
+                return city_name
+        
         # Remove common airport suffixes and keywords
         airport_clean = airport_name.strip()
         
@@ -544,22 +560,6 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
         
         for prefix in prefixes_to_remove:
             airport_clean = re.sub(prefix, '', airport_clean)
-        
-        # First try specific airport mappings for common airports
-        airport_mappings = {
-            '上海浦东国际机场': '上海',
-            '上海虹桥国际机场': '上海', 
-            '新加坡樟宜国际机场': '新加坡',
-            '新加坡樟宜机场': '新加坡',
-            '东京成田国际机场': '东京',
-            '东京羽田机场': '东京',
-            '大阪关西国际机场': '大阪',
-            '大阪伊丹机场': '大阪',
-        }
-        
-        for airport_name, city_name in airport_mappings.items():
-            if airport_name in airport_clean:
-                return city_name
         
         # Extract city name using various patterns
         city_patterns = [
