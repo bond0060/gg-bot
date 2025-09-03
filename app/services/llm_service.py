@@ -593,31 +593,45 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
         # Extract route information from flight text dynamically
         route = "航班查询结果"
         dates = ""
-        departure = "上海"
-        destination = "东京"
-        departure_code = "PVG"
-        destination_code = "NRT"
+        departure = ""
+        destination = ""
+        departure_code = ""
+        destination_code = ""
         
         # Parse route from flight text (look for airport patterns)
         import re
         
-        # Look for airport patterns in flight text like "上海浦东国际机场（PVG）" → "东京成田国际机场（NRT）"
-        airport_pattern = r'([^（]+)（([A-Z]{3})）\s*[→→]\s*([^（]+)（([A-Z]{3})）'
+        # Look for airport patterns in flight text - handle multi-line format
+        departure_airport = ""
+        destination_airport = ""
         
+        # Find departure airport (usually appears first)
         for line in lines:
-            match = re.search(airport_pattern, line)
-            if match:
-                departure_airport = match.group(1).strip()
-                departure_code = match.group(2)
-                destination_airport = match.group(3).strip()
-                destination_code = match.group(4)
-                
-                # Extract city names from airport names
-                departure = self._extract_city_from_airport(departure_airport)
-                destination = self._extract_city_from_airport(destination_airport)
-                
-                route = f"{departure} → {destination}"
-                break
+            if '（' in line and '）' in line and not departure_airport:
+                match = re.search(r'([^（]+)（([A-Z]{3})）', line)
+                if match:
+                    departure_airport = match.group(1).strip()
+                    departure_code = match.group(2)
+                    departure = self._extract_city_from_airport(departure_airport)
+                    break
+        
+        # Find destination airport (usually appears after departure)
+        for line in lines:
+            if '（' in line and '）' in line and departure_airport:
+                match = re.search(r'([^（]+)（([A-Z]{3})）', line)
+                if match:
+                    airport_name = match.group(1).strip()
+                    airport_code = match.group(2)
+                    # Make sure this is different from departure
+                    if airport_code != departure_code:
+                        destination_airport = airport_name
+                        destination_code = airport_code
+                        destination = self._extract_city_from_airport(destination_airport)
+                        break
+        
+        if departure and destination:
+            route = f"{departure} → {destination}"
+            logger.info(f"Parsed route from flight text: {route} (departure: {departure_code}, destination: {destination_code})")
         
         # If no airport pattern found, try to extract from user message
         if route == "航班查询结果" and user_message:
