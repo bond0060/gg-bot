@@ -762,46 +762,53 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
                     }
             
             elif current_plan and line.startswith('🛫'):
+                # End previous segment if exists
+                if current_segment_type and current_segment_lines:
+                    segment_text = '\n'.join(current_segment_lines)
+                    logger.info(f"Parsing {current_segment_type} segment: {segment_text}")
+                    if current_segment_type == 'outbound':
+                        current_plan['outbound'] = self._parse_flight_segment(segment_text)
+                    elif current_segment_type == 'inbound':
+                        current_plan['inbound'] = self._parse_flight_segment(segment_text)
+                
                 # Start of outbound flight segment
                 current_segment_type = 'outbound'
                 current_segment_lines = [line]
             
             elif current_plan and line.startswith('🛬'):
+                # End previous segment if exists
+                if current_segment_type and current_segment_lines:
+                    segment_text = '\n'.join(current_segment_lines)
+                    logger.info(f"Parsing {current_segment_type} segment: {segment_text}")
+                    if current_segment_type == 'outbound':
+                        current_plan['outbound'] = self._parse_flight_segment(segment_text)
+                    elif current_segment_type == 'inbound':
+                        current_plan['inbound'] = self._parse_flight_segment(segment_text)
+                
                 # Start of inbound flight segment
                 current_segment_type = 'inbound'
                 current_segment_lines = [line]
             
             elif current_plan and line.startswith('💰'):
+                # End previous segment if exists
+                if current_segment_type and current_segment_lines:
+                    segment_text = '\n'.join(current_segment_lines)
+                    logger.info(f"Parsing {current_segment_type} segment: {segment_text}")
+                    if current_segment_type == 'outbound':
+                        current_plan['outbound'] = self._parse_flight_segment(segment_text)
+                    elif current_segment_type == 'inbound':
+                        current_plan['inbound'] = self._parse_flight_segment(segment_text)
+                
                 # Parse price
                 price_text = line[2:].strip()
                 current_plan['price'] = price_text
                 current_plan['price_note'] = price_text
+                current_segment_type = None
+                current_segment_lines = []
             
             elif current_plan and current_segment_type and line and not line.startswith('🅰️') and not line.startswith('🅱️') and not line.startswith('🅲️'):
-                # Collect lines for current segment until we hit next segment or end
-                if line.startswith('🛫') or line.startswith('🛬') or line.startswith('💰'):
-                    # End of current segment, parse it
-                    if current_segment_lines:
-                        segment_text = '\n'.join(current_segment_lines)
-                        logger.info(f"Parsing {current_segment_type} segment: {segment_text}")
-                        if current_segment_type == 'outbound':
-                            current_plan['outbound'] = self._parse_flight_segment(segment_text)
-                        elif current_segment_type == 'inbound':
-                            current_plan['inbound'] = self._parse_flight_segment(segment_text)
-                    
-                    # Start new segment
-                    if line.startswith('🛫'):
-                        current_segment_type = 'outbound'
-                        current_segment_lines = [line]
-                    elif line.startswith('🛬'):
-                        current_segment_type = 'inbound'
-                        current_segment_lines = [line]
-                    else:
-                        current_segment_type = None
-                        current_segment_lines = []
-                else:
-                    # Collect all lines that belong to current segment
-                    current_segment_lines.append(line)
+                # Collect all lines that belong to current segment
+                current_segment_lines.append(line)
         
         # Parse the last segment if exists
         if current_plan and current_segment_type and current_segment_lines:
