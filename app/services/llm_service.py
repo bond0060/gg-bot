@@ -419,8 +419,8 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
             return None
             
         # Extract route information
-        departure = "上海"
-        destination = "东京"
+        departure = ""
+        destination = ""
         
         # First try to extract from flight text if available
         if flight_text:
@@ -439,7 +439,7 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
                     break
         
         # If no route found in flight text, try user message
-        if departure == "上海" and destination == "东京" and user_message:
+        if not departure and not destination and user_message:
             import re
             route_patterns = [
                 r'从\s*([^到]+?)\s*到\s*([^，。\s]+)',
@@ -717,8 +717,8 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
                         '拉各斯': 'LOS', '内罗毕': 'NBO', '达累斯萨拉姆': 'DAR'
                     }
                     
-                    departure_code = city_codes.get(departure_city, 'PVG')
-                    destination_code = city_codes.get(destination_city, 'NRT')
+                    departure_code = city_codes.get(departure_city, '')
+                    destination_code = city_codes.get(destination_city, '')
                     
                     route = f"{departure_city} → {destination_city}"
                     departure = departure_city
