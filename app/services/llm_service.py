@@ -369,8 +369,10 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
             if web_link:
                 result += f"\n\n🌐 [在网页中选择和预订航班方案]({web_link})"
             else:
-                # Fallback link if web generation fails
-                result += f"\n\n🌐 [在网页中选择和预订航班方案](https://waypal.ai/)"
+                # Generate a more specific fallback link based on the route
+                fallback_link = self._generate_fallback_booking_link(user_message, context)
+                if fallback_link:
+                    result += f"\n\n🌐 [预订航班]({fallback_link})"
         
         # Debug: log if we have no formatted content
         if not result:
@@ -404,6 +406,55 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
             logger.error(f"Error generating web link: {e}")
         
         return None
+
+    def _generate_fallback_booking_link(self, user_message: Optional[str], context: Optional[Dict[str, Any]]) -> Optional[str]:
+        """Generate a fallback booking link when web generation fails"""
+        if not user_message:
+            return None
+            
+        # Extract route information
+        departure = "上海"
+        destination = "东京"
+        
+        # Try to extract route from user message
+        import re
+        route_patterns = [
+            r'从\s*([^到]+?)\s*到\s*([^，。\s]+)',
+            r'([^到]+?)\s*到\s*([^，。\s]+)',
+            r'([^飞]+?)\s*飞\s*([^，。\s]+)'
+        ]
+        
+        for pattern in route_patterns:
+            match = re.search(pattern, user_message)
+            if match:
+                departure = match.group(1).strip()
+                destination = match.group(2).strip()
+                break
+        
+        # Map city names to English for search
+        city_mapping = {
+            '上海': 'Shanghai',
+            '北京': 'Beijing', 
+            '深圳': 'Shenzhen',
+            '广州': 'Guangzhou',
+            '东京': 'Tokyo',
+            '大阪': 'Osaka',
+            '北海道': 'Hokkaido',
+            '札幌': 'Sapporo',
+            '首尔': 'Seoul',
+            '新加坡': 'Singapore',
+            '香港': 'Hong Kong',
+            '台北': 'Taipei'
+        }
+        
+        departure_en = city_mapping.get(departure, 'Shanghai')
+        destination_en = city_mapping.get(destination, 'Tokyo')
+        
+        # Generate Amadeus search link [[memory:7792854]]
+        search_query = f"{departure_en} to {destination_en}"
+        amadeus_link = f"https://www.amadeus.com/travel/flight-search?origin={departure_en}&destination={destination_en}&departureDate=&returnDate=&adults=1&children=0&infants=0&travelClass=economy&currency=CNY"
+        
+        return amadeus_link
 
     def _parse_flight_data_for_web(self, flight_text: str, user_message: Optional[str], context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """Parse flight text into structured data for web display"""
