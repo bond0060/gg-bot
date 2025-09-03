@@ -815,6 +815,22 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
         if current_plan:
             plans.append(current_plan)
         
+        # For web display, use the first complete plan with both outbound and inbound segments
+        selected_plan = None
+        for plan in plans:
+            if plan.get('outbound') and plan.get('inbound'):
+                selected_plan = plan
+                logger.info(f"Selected plan {plan.get('code', 'Unknown')} for web display with outbound and inbound segments")
+                break
+        
+        # If we have a selected plan, parse its segments for web display
+        if selected_plan:
+            outbound_info = selected_plan.get('outbound', {})
+            inbound_info = selected_plan.get('inbound', {})
+            
+            logger.info(f"Web display will show outbound: {outbound_info}")
+            logger.info(f"Web display will show inbound: {inbound_info}")
+        
         return {
             'title': f'{route} 航班选择',
             'route': route,
