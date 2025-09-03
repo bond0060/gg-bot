@@ -823,13 +823,23 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
                 logger.info(f"Selected plan {plan.get('code', 'Unknown')} for web display with outbound and inbound segments")
                 break
         
-        # If we have a selected plan, parse its segments for web display
+        # If we have a selected plan, use it for web display
         if selected_plan:
             outbound_info = selected_plan.get('outbound', {})
             inbound_info = selected_plan.get('inbound', {})
             
             logger.info(f"Web display will show outbound: {outbound_info}")
             logger.info(f"Web display will show inbound: {inbound_info}")
+            
+            # Update departure and destination info from the selected plan
+            if outbound_info:
+                departure = outbound_info.get('departure_city', departure)
+                departure_code = outbound_info.get('departure_code', departure_code)
+            if inbound_info:
+                destination = inbound_info.get('destination_city', destination)
+                destination_code = inbound_info.get('destination_code', destination_code)
+            
+            logger.info(f"Updated route info for web display: {departure} ({departure_code}) → {destination} ({destination_code})")
         
         return {
             'title': f'{route} 航班选择',
