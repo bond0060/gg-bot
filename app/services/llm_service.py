@@ -391,9 +391,13 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
         """Generate a web link for flight selection page"""
         try:
             import requests
+            import json
             
             # Parse flight data from the formatted text
             flight_data = self._parse_flight_data_for_web(flight_text, user_message, context)
+            
+            # Debug: log the data being sent to web server
+            logger.info(f"Sending flight data to web server: {json.dumps(flight_data, ensure_ascii=False, indent=2)}")
             
             # Send data to web server using synchronous requests
             response = requests.post('https://waypal.ai/api/flights', 
