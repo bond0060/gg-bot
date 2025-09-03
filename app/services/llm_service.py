@@ -700,10 +700,13 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
         # Parse flight plans
         plans = []
         current_plan = None
+        current_segment_lines = []
+        current_segment_type = None
         
-        for line in lines:
+        for i, line in enumerate(lines):
             line = line.strip()
             if line.startswith('🅰️') or line.startswith('🅱️') or line.startswith('🅲️'):
+                # Save previous plan if exists
                 if current_plan:
                     plans.append(current_plan)
                 
@@ -725,18 +728,53 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
                     }
             
             elif current_plan and line.startswith('🛫'):
-                # Parse outbound flight
-                current_plan['outbound'] = self._parse_flight_segment(line)
+                # Start of outbound flight segment
+                current_segment_type = 'outbound'
+                current_segment_lines = [line]
             
             elif current_plan and line.startswith('🛬'):
-                # Parse inbound flight
-                current_plan['inbound'] = self._parse_flight_segment(line)
+                # Start of inbound flight segment
+                current_segment_type = 'inbound'
+                current_segment_lines = [line]
             
             elif current_plan and line.startswith('💰'):
                 # Parse price
                 price_text = line[2:].strip()
                 current_plan['price'] = price_text
                 current_plan['price_note'] = price_text
+            
+            elif current_plan and current_segment_type and line and not line.startswith('🅰️') and not line.startswith('🅱️') and not line.startswith('🅲️'):
+                # Collect lines for current segment until we hit next segment or end
+                if line.startswith('→') or '（' in line and '）' in line:
+                    current_segment_lines.append(line)
+                elif line.startswith('🛫') or line.startswith('🛬') or line.startswith('💰'):
+                    # End of current segment, parse it
+                    segment_text = '\n'.join(current_segment_lines)
+                    if current_segment_type == 'outbound':
+                        current_plan['outbound'] = self._parse_flight_segment(segment_text)
+                    elif current_segment_type == 'inbound':
+                        current_plan['inbound'] = self._parse_flight_segment(segment_text)
+                    
+                    # Start new segment
+                    if line.startswith('🛫'):
+                        current_segment_type = 'outbound'
+                        current_segment_lines = [line]
+                    elif line.startswith('🛬'):
+                        current_segment_type = 'inbound'
+                        current_segment_lines = [line]
+                    else:
+                        current_segment_type = None
+                        current_segment_lines = []
+                else:
+                    current_segment_lines.append(line)
+        
+        # Parse the last segment if exists
+        if current_plan and current_segment_type and current_segment_lines:
+            segment_text = '\n'.join(current_segment_lines)
+            if current_segment_type == 'outbound':
+                current_plan['outbound'] = self._parse_flight_segment(segment_text)
+            elif current_segment_type == 'inbound':
+                current_plan['inbound'] = self._parse_flight_segment(segment_text)
         
         if current_plan:
             plans.append(current_plan)
@@ -754,8 +792,8 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
             'suggestions': []
         }
 
-    def _parse_flight_segment(self, line: str) -> Dict[str, str]:
-        """Parse a flight segment line into structured data"""
+    def _parse_flight_segment(self, text: str) -> Dict[str, str]:
+        """Parse a flight segment text (can be multi-line) into structured data"""
         import re
         
         # Initialize with default values
@@ -773,18 +811,18 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
         
         try:
             # Extract date pattern like "10月1日"
-            date_match = re.search(r'(\d{1,2})月\s*(\d{1,2})[号日]?', line)
+            date_match = re.search(r'(\d{1,2})月\s*(\d{1,2})[号日]?', text)
             if date_match:
                 result['date'] = f"{date_match.group(1)}月{date_match.group(2)}日"
             
             # Extract flight number pattern like "MU 210"
-            flight_match = re.search(r'([A-Z]{2})\s*(\d{3,4})', line)
+            flight_match = re.search(r'([A-Z]{2})\s*(\d{3,4})', text)
             if flight_match:
                 result['flight_number'] = f"{flight_match.group(1)} {flight_match.group(2)}"
             
             # Extract airport pattern like "上海浦东国际机场（PVG） 09:00"
             airport_pattern = r'([^（]+)（([A-Z]{3})）\s*(\d{1,2}:\d{2})'
-            airports = re.findall(airport_pattern, line)
+            airports = re.findall(airport_pattern, text)
             
             if len(airports) >= 2:
                 # First airport is departure
