@@ -365,14 +365,20 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
         
         # Add web page link for flight selection
         if result and any(keyword in result for keyword in ["方案A", "方案B", "方案C"]):
+            logger.info(f"Generating web link for user message: {user_message}")
             web_link = self._generate_flight_web_link(result, user_message, context)
             if web_link:
+                logger.info(f"Generated web link: {web_link}")
                 result += f"\n\n🌐 [在网页中选择和预订航班方案]({web_link})"
             else:
+                logger.info("Web link generation failed, using fallback")
                 # Generate a more specific fallback link based on the route
                 fallback_link = self._generate_fallback_booking_link(user_message, context)
                 if fallback_link:
+                    logger.info(f"Generated fallback link: {fallback_link}")
                     result += f"\n\n🌐 [预订航班]({fallback_link})"
+                else:
+                    logger.warning("Both web link and fallback link generation failed")
         
         # Debug: log if we have no formatted content
         if not result:
@@ -488,6 +494,12 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
                 destination = "深圳"
                 departure_code = "PVG"
                 destination_code = "SZX"
+            elif "上海" in user_message and "大阪" in user_message:
+                route = "上海 → 大阪"
+                departure = "上海"
+                destination = "大阪"
+                departure_code = "PVG"
+                destination_code = "KIX"
             elif "北京" in user_message and "东京" in user_message:
                 route = "北京 → 东京"
                 departure = "北京"
