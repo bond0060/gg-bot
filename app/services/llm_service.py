@@ -613,6 +613,7 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
                     departure_airport = match.group(1).strip()
                     departure_code = match.group(2)
                     departure = self._extract_city_from_airport(departure_airport)
+                    logger.info(f"Found departure airport: {departure_airport} ({departure_code}) -> {departure}")
                     break
         
         # Find destination airport (usually appears after departure)
@@ -627,11 +628,14 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
                         destination_airport = airport_name
                         destination_code = airport_code
                         destination = self._extract_city_from_airport(destination_airport)
+                        logger.info(f"Found destination airport: {destination_airport} ({destination_code}) -> {destination}")
                         break
         
         if departure and destination:
             route = f"{departure} → {destination}"
             logger.info(f"Parsed route from flight text: {route} (departure: {departure_code}, destination: {destination_code})")
+        else:
+            logger.warning(f"Failed to parse route from flight text. Departure: {departure}, Destination: {destination}")
         
         # If no airport pattern found, try to extract from user message
         if route == "航班查询结果" and user_message:
