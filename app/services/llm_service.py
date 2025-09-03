@@ -431,12 +431,48 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
                 destination = "北海道"
                 departure_code = "PVG"
                 destination_code = "CTS"
+            elif "上海" in user_message and "深圳" in user_message:
+                route = "上海 → 深圳"
+                departure = "上海"
+                destination = "深圳"
+                departure_code = "PVG"
+                destination_code = "SZX"
             elif "北京" in user_message and "东京" in user_message:
                 route = "北京 → 东京"
                 departure = "北京"
                 destination = "东京"
                 departure_code = "PEK"
                 destination_code = "NRT"
+            else:
+                # Try to extract route dynamically from user message
+                import re
+                # Look for patterns like "从X到Y" or "X到Y" or "X飞Y"
+                route_patterns = [
+                    r'从\s*([^到]+?)\s*到\s*([^，。\s]+)',
+                    r'([^到]+?)\s*到\s*([^，。\s]+)',
+                    r'([^飞]+?)\s*飞\s*([^，。\s]+)'
+                ]
+                
+                for pattern in route_patterns:
+                    match = re.search(pattern, user_message)
+                    if match:
+                        departure_city = match.group(1).strip()
+                        destination_city = match.group(2).strip()
+                        
+                        # Map city names to codes
+                        city_codes = {
+                            '上海': 'PVG', '北京': 'PEK', '深圳': 'SZX', '广州': 'CAN',
+                            '东京': 'NRT', '大阪': 'KIX', '北海道': 'CTS', '札幌': 'CTS',
+                            '首尔': 'ICN', '新加坡': 'SIN', '香港': 'HKG', '台北': 'TPE'
+                        }
+                        
+                        departure_code = city_codes.get(departure_city, 'PVG')
+                        destination_code = city_codes.get(destination_city, 'NRT')
+                        
+                        route = f"{departure_city} → {destination_city}"
+                        departure = departure_city
+                        destination = destination_city
+                        break
             
             # Extract dates
             import re
