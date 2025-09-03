@@ -456,22 +456,57 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
         
         # Map city names to English for search
         city_mapping = {
-            '上海': 'Shanghai',
-            '北京': 'Beijing', 
-            '深圳': 'Shenzhen',
-            '广州': 'Guangzhou',
-            '东京': 'Tokyo',
-            '大阪': 'Osaka',
-            '北海道': 'Hokkaido',
-            '札幌': 'Sapporo',
-            '首尔': 'Seoul',
-            '新加坡': 'Singapore',
-            '香港': 'Hong Kong',
-            '台北': 'Taipei'
+            # Chinese cities
+            '上海': 'Shanghai', '北京': 'Beijing', '深圳': 'Shenzhen', '广州': 'Guangzhou',
+            '成都': 'Chengdu', '重庆': 'Chongqing', '西安': 'Xian', '杭州': 'Hangzhou',
+            '南京': 'Nanjing', '武汉': 'Wuhan', '天津': 'Tianjin', '青岛': 'Qingdao',
+            '大连': 'Dalian', '厦门': 'Xiamen', '福州': 'Fuzhou', '济南': 'Jinan',
+            '长沙': 'Changsha', '郑州': 'Zhengzhou', '昆明': 'Kunming', '贵阳': 'Guiyang',
+            '南宁': 'Nanning', '海口': 'Haikou', '三亚': 'Sanya', '乌鲁木齐': 'Urumqi',
+            '兰州': 'Lanzhou', '银川': 'Yinchuan', '西宁': 'Xining', '拉萨': 'Lhasa',
+            '呼和浩特': 'Hohhot', '哈尔滨': 'Harbin', '长春': 'Changchun', '沈阳': 'Shenyang',
+            '石家庄': 'Shijiazhuang', '太原': 'Taiyuan', '合肥': 'Hefei', '南昌': 'Nanchang',
+            '台北': 'Taipei', '高雄': 'Kaohsiung', '台中': 'Taichung', '香港': 'Hong Kong',
+            '澳门': 'Macau',
+            
+            # Japanese cities
+            '东京': 'Tokyo', '大阪': 'Osaka', '名古屋': 'Nagoya', '福冈': 'Fukuoka',
+            '札幌': 'Sapporo', '仙台': 'Sendai', '广岛': 'Hiroshima', '京都': 'Kyoto',
+            '神户': 'Kobe', '横滨': 'Yokohama', '川崎': 'Kawasaki', '埼玉': 'Saitama',
+            '千叶': 'Chiba', '静冈': 'Shizuoka', '冈山': 'Okayama', '熊本': 'Kumamoto',
+            '鹿儿岛': 'Kagoshima', '冲绳': 'Okinawa', '北海道': 'Hokkaido',
+            
+            # Korean cities
+            '首尔': 'Seoul', '釜山': 'Busan', '大邱': 'Daegu', '仁川': 'Incheon',
+            '光州': 'Gwangju', '大田': 'Daejeon', '蔚山': 'Ulsan', '水原': 'Suwon',
+            
+            # Southeast Asian cities
+            '新加坡': 'Singapore', '吉隆坡': 'Kuala Lumpur', '曼谷': 'Bangkok',
+            '雅加达': 'Jakarta', '马尼拉': 'Manila', '胡志明市': 'Ho Chi Minh City',
+            '河内': 'Hanoi', '金边': 'Phnom Penh', '万象': 'Vientiane', '仰光': 'Yangon',
+            
+            # Other major cities
+            '纽约': 'New York', '洛杉矶': 'Los Angeles', '芝加哥': 'Chicago',
+            '休斯顿': 'Houston', '费城': 'Philadelphia', '凤凰城': 'Phoenix',
+            '圣安东尼奥': 'San Antonio', '圣地亚哥': 'San Diego', '达拉斯': 'Dallas',
+            '圣何塞': 'San Jose', '奥斯汀': 'Austin', '杰克逊维尔': 'Jacksonville',
+            '伦敦': 'London', '巴黎': 'Paris', '柏林': 'Berlin', '罗马': 'Rome',
+            '马德里': 'Madrid', '阿姆斯特丹': 'Amsterdam', '维也纳': 'Vienna',
+            '苏黎世': 'Zurich', '布鲁塞尔': 'Brussels', '哥本哈根': 'Copenhagen',
+            '斯德哥尔摩': 'Stockholm', '奥斯陆': 'Oslo', '赫尔辛基': 'Helsinki',
+            '莫斯科': 'Moscow', '圣彼得堡': 'Saint Petersburg', '基辅': 'Kiev',
+            '悉尼': 'Sydney', '墨尔本': 'Melbourne', '布里斯班': 'Brisbane',
+            '珀斯': 'Perth', '阿德莱德': 'Adelaide', '奥克兰': 'Auckland',
+            '多伦多': 'Toronto', '温哥华': 'Vancouver', '蒙特利尔': 'Montreal',
+            '墨西哥城': 'Mexico City', '圣保罗': 'Sao Paulo', '里约热内卢': 'Rio de Janeiro',
+            '布宜诺斯艾利斯': 'Buenos Aires', '利马': 'Lima', '波哥大': 'Bogota',
+            '开罗': 'Cairo', '约翰内斯堡': 'Johannesburg', '开普敦': 'Cape Town',
+            '拉各斯': 'Lagos', '内罗毕': 'Nairobi', '达累斯萨拉姆': 'Dar es Salaam'
         }
         
-        departure_en = city_mapping.get(departure, 'Shanghai')
-        destination_en = city_mapping.get(destination, 'Tokyo')
+        # Try to get English name, fallback to original if not found
+        departure_en = city_mapping.get(departure, departure)
+        destination_en = city_mapping.get(destination, destination)
         
         # Generate Amadeus search link [[memory:7792854]]
         search_query = f"{departure_en} to {destination_en}"
@@ -480,36 +515,76 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
         return amadeus_link
 
     def _extract_city_from_airport(self, airport_name: str) -> str:
-        """Extract city name from airport name"""
-        # Map airport names to cities
-        airport_to_city = {
-            '上海浦东国际机场': '上海',
-            '上海虹桥国际机场': '上海',
-            '北京首都国际机场': '北京',
-            '北京大兴国际机场': '北京',
-            '深圳宝安国际机场': '深圳',
-            '广州白云国际机场': '广州',
-            '东京成田国际机场': '东京',
-            '东京羽田机场': '东京',
-            '大阪关西国际机场': '大阪',
-            '札幌新千岁机场': '札幌',
-            '首尔仁川国际机场': '首尔',
-            '新加坡樟宜机场': '新加坡',
-            '香港国际机场': '香港',
-            '台北桃园国际机场': '台北'
-        }
+        """Extract city name from airport name using intelligent parsing"""
+        import re
         
-        # Try exact match first
-        if airport_name in airport_to_city:
-            return airport_to_city[airport_name]
+        # Remove common airport suffixes and keywords
+        airport_clean = airport_name.strip()
         
-        # Try partial match
-        for airport, city in airport_to_city.items():
-            if airport in airport_name or airport_name in airport:
-                return city
+        # Remove common airport suffixes in multiple languages
+        suffixes_to_remove = [
+            r'国际机场$', r'机场$', r'Airport$', r'International Airport$',
+            r'Domestic Airport$', r'Regional Airport$', r'Field$',
+            r'空港$', r'国際空港$', r'国内空港$', r'공항$', r'국제공항$'
+        ]
         
-        # Fallback: extract first few characters as city name
-        return airport_name[:2] if len(airport_name) >= 2 else airport_name
+        for suffix in suffixes_to_remove:
+            airport_clean = re.sub(suffix, '', airport_clean, flags=re.IGNORECASE)
+        
+        # Remove common prefixes
+        prefixes_to_remove = [
+            r'^北京', r'^上海', r'^广州', r'^深圳', r'^成都', r'^重庆',
+            r'^西安', r'^杭州', r'^南京', r'^武汉', r'^天津', r'^青岛',
+            r'^大连', r'^厦门', r'^福州', r'^济南', r'^长沙', r'^郑州',
+            r'^昆明', r'^贵阳', r'^南宁', r'^海口', r'^三亚', r'^乌鲁木齐',
+            r'^兰州', r'^银川', r'^西宁', r'^拉萨', r'^呼和浩特', r'^哈尔滨',
+            r'^长春', r'^沈阳', r'^石家庄', r'^太原', r'^合肥', r'^南昌',
+            r'^福州', r'^台北', r'^高雄', r'^台中', r'^香港', r'^澳门'
+        ]
+        
+        for prefix in prefixes_to_remove:
+            airport_clean = re.sub(prefix, '', airport_clean)
+        
+        # Extract city name using various patterns
+        city_patterns = [
+            # Chinese cities
+            r'([^国际空港机场]+?)(?:国际|国内|)?(?:空港|机场)',
+            r'([^国际空港机场]+?)(?:Airport|Field)',
+            # International cities - extract before common airport names
+            r'([^A-Z\s]+?)(?:\s+(?:International|Domestic|Regional)?\s*Airport)',
+            r'([^A-Z\s]+?)(?:\s+Field)',
+            # Handle special cases like "New York JFK" -> "New York"
+            r'([^A-Z\s]+?)(?:\s+[A-Z]{3,4})',
+        ]
+        
+        for pattern in city_patterns:
+            match = re.search(pattern, airport_clean, re.IGNORECASE)
+            if match:
+                city = match.group(1).strip()
+                if city and len(city) > 1:
+                    return city
+        
+        # If no pattern matches, try to extract meaningful parts
+        # Split by common separators and take the most meaningful part
+        parts = re.split(r'[\s\-_]+', airport_clean)
+        
+        # Filter out common airport-related words
+        airport_words = {'airport', 'field', 'terminal', 'international', 'domestic', 
+                        'regional', 'airport', '空港', '机场', '国际', '国内'}
+        
+        meaningful_parts = [part for part in parts 
+                          if part.lower() not in airport_words and len(part) > 1]
+        
+        if meaningful_parts:
+            # Return the longest meaningful part
+            return max(meaningful_parts, key=len)
+        
+        # Final fallback: return first 2-3 characters if Chinese, or first word if English
+        if re.search(r'[\u4e00-\u9fff]', airport_clean):
+            return airport_clean[:2] if len(airport_clean) >= 2 else airport_clean
+        else:
+            first_word = airport_clean.split()[0] if airport_clean.split() else airport_clean
+            return first_word[:10] if len(first_word) > 10 else first_word
 
     def _parse_flight_data_for_web(self, flight_text: str, user_message: Optional[str], context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """Parse flight text into structured data for web display"""
@@ -558,11 +633,54 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
                     departure_city = match.group(1).strip()
                     destination_city = match.group(2).strip()
                     
-                    # Map city names to codes
+                    # Map city names to codes (expanded list)
                     city_codes = {
+                        # Chinese cities
                         '上海': 'PVG', '北京': 'PEK', '深圳': 'SZX', '广州': 'CAN',
-                        '东京': 'NRT', '大阪': 'KIX', '北海道': 'CTS', '札幌': 'CTS',
-                        '首尔': 'ICN', '新加坡': 'SIN', '香港': 'HKG', '台北': 'TPE'
+                        '成都': 'CTU', '重庆': 'CKG', '西安': 'XIY', '杭州': 'HGH',
+                        '南京': 'NKG', '武汉': 'WUH', '天津': 'TSN', '青岛': 'TAO',
+                        '大连': 'DLC', '厦门': 'XMN', '福州': 'FOC', '济南': 'TNA',
+                        '长沙': 'CSX', '郑州': 'CGO', '昆明': 'KMG', '贵阳': 'KWE',
+                        '南宁': 'NNG', '海口': 'HAK', '三亚': 'SYX', '乌鲁木齐': 'URC',
+                        '兰州': 'LHW', '银川': 'INC', '西宁': 'XNN', '拉萨': 'LXA',
+                        '呼和浩特': 'HET', '哈尔滨': 'HRB', '长春': 'CGQ', '沈阳': 'SHE',
+                        '石家庄': 'SJW', '太原': 'TYN', '合肥': 'HFE', '南昌': 'KHN',
+                        '台北': 'TPE', '高雄': 'KHH', '台中': 'RMQ', '香港': 'HKG',
+                        '澳门': 'MFM',
+                        
+                        # Japanese cities
+                        '东京': 'NRT', '大阪': 'KIX', '名古屋': 'NGO', '福冈': 'FUK',
+                        '札幌': 'CTS', '仙台': 'SDJ', '广岛': 'HIJ', '京都': 'UKY',
+                        '神户': 'UKB', '横滨': 'YOK', '川崎': 'KWS', '埼玉': 'SAI',
+                        '千叶': 'CHB', '静冈': 'FSZ', '冈山': 'OKJ', '熊本': 'KMJ',
+                        '鹿儿岛': 'KOJ', '冲绳': 'OKA', '北海道': 'CTS',
+                        
+                        # Korean cities
+                        '首尔': 'ICN', '釜山': 'PUS', '大邱': 'TAE', '仁川': 'ICN',
+                        '光州': 'KWJ', '大田': 'TJW', '蔚山': 'USN', '水原': 'SWU',
+                        
+                        # Southeast Asian cities
+                        '新加坡': 'SIN', '吉隆坡': 'KUL', '曼谷': 'BKK',
+                        '雅加达': 'CGK', '马尼拉': 'MNL', '胡志明市': 'SGN',
+                        '河内': 'HAN', '金边': 'PNH', '万象': 'VTE', '仰光': 'RGN',
+                        
+                        # Other major cities
+                        '纽约': 'JFK', '洛杉矶': 'LAX', '芝加哥': 'ORD',
+                        '休斯顿': 'IAH', '费城': 'PHL', '凤凰城': 'PHX',
+                        '圣安东尼奥': 'SAT', '圣地亚哥': 'SAN', '达拉斯': 'DFW',
+                        '圣何塞': 'SJC', '奥斯汀': 'AUS', '杰克逊维尔': 'JAX',
+                        '伦敦': 'LHR', '巴黎': 'CDG', '柏林': 'BER', '罗马': 'FCO',
+                        '马德里': 'MAD', '阿姆斯特丹': 'AMS', '维也纳': 'VIE',
+                        '苏黎世': 'ZUR', '布鲁塞尔': 'BRU', '哥本哈根': 'CPH',
+                        '斯德哥尔摩': 'ARN', '奥斯陆': 'OSL', '赫尔辛基': 'HEL',
+                        '莫斯科': 'SVO', '圣彼得堡': 'LED', '基辅': 'KBP',
+                        '悉尼': 'SYD', '墨尔本': 'MEL', '布里斯班': 'BNE',
+                        '珀斯': 'PER', '阿德莱德': 'ADL', '奥克兰': 'AKL',
+                        '多伦多': 'YYZ', '温哥华': 'YVR', '蒙特利尔': 'YUL',
+                        '墨西哥城': 'MEX', '圣保罗': 'GRU', '里约热内卢': 'GIG',
+                        '布宜诺斯艾利斯': 'EZE', '利马': 'LIM', '波哥大': 'BOG',
+                        '开罗': 'CAI', '约翰内斯堡': 'JNB', '开普敦': 'CPT',
+                        '拉各斯': 'LOS', '内罗毕': 'NBO', '达累斯萨拉姆': 'DAR'
                     }
                     
                     departure_code = city_codes.get(departure_city, 'PVG')
