@@ -756,18 +756,69 @@ IMPORTANT: Always include FULL airport names with IATA codes. Examples:
 
     def _parse_flight_segment(self, line: str) -> Dict[str, str]:
         """Parse a flight segment line into structured data"""
-        # This is a simplified parser - you might want to make it more robust
-        return {
-            'date': '10月1日',
-            'flight_number': 'NH 968',
-            'departure_time': '10:20',
-            'departure_airport': '浦东国际机场',
-            'departure_code': 'PVG',
-            'arrival_time': '14:00',
-            'arrival_airport': '羽田机场',
-            'arrival_code': 'HND',
-            'duration': '3h 40m'
+        import re
+        
+        # Initialize with default values
+        result = {
+            'date': '',
+            'flight_number': '',
+            'departure_time': '',
+            'departure_airport': '',
+            'departure_code': '',
+            'arrival_time': '',
+            'arrival_airport': '',
+            'arrival_code': '',
+            'duration': ''
         }
+        
+        try:
+            # Extract date pattern like "10月1日"
+            date_match = re.search(r'(\d{1,2})月\s*(\d{1,2})[号日]?', line)
+            if date_match:
+                result['date'] = f"{date_match.group(1)}月{date_match.group(2)}日"
+            
+            # Extract flight number pattern like "MU 210"
+            flight_match = re.search(r'([A-Z]{2})\s*(\d{3,4})', line)
+            if flight_match:
+                result['flight_number'] = f"{flight_match.group(1)} {flight_match.group(2)}"
+            
+            # Extract airport pattern like "上海浦东国际机场（PVG） 09:00"
+            airport_pattern = r'([^（]+)（([A-Z]{3})）\s*(\d{1,2}:\d{2})'
+            airports = re.findall(airport_pattern, line)
+            
+            if len(airports) >= 2:
+                # First airport is departure
+                result['departure_airport'] = airports[0][0].strip()
+                result['departure_code'] = airports[0][1]
+                result['departure_time'] = airports[0][2]
+                
+                # Second airport is arrival
+                result['arrival_airport'] = airports[1][0].strip()
+                result['arrival_code'] = airports[1][1]
+                result['arrival_time'] = airports[1][2]
+            
+            # Calculate duration if we have both times
+            if result['departure_time'] and result['arrival_time']:
+                try:
+                    from datetime import datetime, timedelta
+                    dep_time = datetime.strptime(result['departure_time'], '%H:%M')
+                    arr_time = datetime.strptime(result['arrival_time'], '%H:%M')
+                    
+                    # Handle overnight flights
+                    if arr_time < dep_time:
+                        arr_time += timedelta(days=1)
+                    
+                    duration = arr_time - dep_time
+                    hours = duration.seconds // 3600
+                    minutes = (duration.seconds % 3600) // 60
+                    result['duration'] = f"{hours}h {minutes}m"
+                except:
+                    result['duration'] = ''
+            
+        except Exception as e:
+            logger.error(f"Error parsing flight segment: {e}")
+        
+        return result
 
     def _build_user_requirement_summary(self, user_message: Optional[str], context: Optional[Dict[str, Any]]) -> str:
         """Build a concise preface summarizing user's key requirements in Chinese.
