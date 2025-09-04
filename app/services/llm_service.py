@@ -14,6 +14,7 @@ from app.models.travel_plan import TravelPlan, TravelType, BudgetLevel, Activity
 from app.services.plan_storage import plan_storage
 from app.services.follow_up_questions import follow_up_service
 from app.services.flight_search import flight_search_service
+from app.services.firecrawl_service import firecrawl_service
 from search.google_search import search_web
 
 logger = logging.getLogger(__name__)
@@ -2006,3 +2007,272 @@ Guidelines:
             "photo": "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",  # Default hotel image
             "video": "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4"
         })
+
+    async def get_realtime_travel_info(self, destination: str, info_type: str = "general") -> Optional[str]:
+        """
+        Get real-time travel information using Firecrawl
+        
+        Args:
+            destination: Destination name
+            info_type: Type of information (general, hotels, restaurants, attractions)
+            
+        Returns:
+            Formatted travel information string or None if failed
+        """
+        try:
+            logger.info(f"Getting real-time travel info for {destination} - {info_type}")
+            
+            # Get travel info from Firecrawl
+            travel_info = await firecrawl_service.get_travel_info(destination, info_type)
+            
+            if not travel_info:
+                return None
+            
+            # Format the information for LLM
+            formatted_info = self._format_firecrawl_travel_info(travel_info)
+            
+            return formatted_info
+            
+        except Exception as e:
+            logger.error(f"Error getting real-time travel info for {destination}: {e}")
+            return None
+
+    async def get_realtime_flight_info(self, origin: str, destination: str) -> Optional[str]:
+        """
+        Get real-time flight information using Firecrawl
+        
+        Args:
+            origin: Origin city
+            destination: Destination city
+            
+        Returns:
+            Formatted flight information string or None if failed
+        """
+        try:
+            logger.info(f"Getting real-time flight info from {origin} to {destination}")
+            
+            # Get flight info from Firecrawl
+            flight_info = await firecrawl_service.get_flight_info(origin, destination)
+            
+            if not flight_info:
+                return None
+            
+            # Format the information for LLM
+            formatted_info = self._format_firecrawl_flight_info(flight_info)
+            
+            return formatted_info
+            
+        except Exception as e:
+            logger.error(f"Error getting real-time flight info from {origin} to {destination}: {e}")
+            return None
+
+    async def get_realtime_hotel_info(self, destination: str, check_in: str = None, check_out: str = None) -> Optional[str]:
+        """
+        Get real-time hotel information using Firecrawl
+        
+        Args:
+            destination: Destination city
+            check_in: Check-in date (optional)
+            check_out: Check-out date (optional)
+            
+        Returns:
+            Formatted hotel information string or None if failed
+        """
+        try:
+            logger.info(f"Getting real-time hotel info for {destination}")
+            
+            # Get hotel info from Firecrawl
+            hotel_info = await firecrawl_service.get_hotel_info(destination, check_in, check_out)
+            
+            if not hotel_info:
+                return None
+            
+            # Format the information for LLM
+            formatted_info = self._format_firecrawl_hotel_info(hotel_info)
+            
+            return formatted_info
+            
+        except Exception as e:
+            logger.error(f"Error getting real-time hotel info for {destination}: {e}")
+            return None
+
+    def _format_firecrawl_travel_info(self, travel_info: Dict[str, Any]) -> str:
+        """Format Firecrawl travel information for LLM consumption"""
+        try:
+            destination = travel_info.get("destination", "")
+            info_type = travel_info.get("info_type", "")
+            sources = travel_info.get("sources", [])
+            combined_content = travel_info.get("combined_content", "")
+            
+            formatted = f"🌍 **{destination}的{info_type}信息** (实时数据)\n\n"
+            
+            if sources:
+                formatted += "📚 **信息来源:**\n"
+                for i, source in enumerate(sources[:3], 1):
+                    title = source.get("title", "无标题")
+                    url = source.get("url", "")
+                    formatted += f"{i}. {title}\n   {url}\n"
+                formatted += "\n"
+            
+            # Truncate content if too long
+            if len(combined_content) > 2000:
+                combined_content = combined_content[:2000] + "..."
+            
+            formatted += f"📝 **详细信息:**\n{combined_content}\n\n"
+            formatted += "💡 *以上信息来自实时网页抓取，请以最新数据为准*"
+            
+            return formatted
+            
+        except Exception as e:
+            logger.error(f"Error formatting Firecrawl travel info: {e}")
+            return "获取实时信息时出现错误"
+
+    def _format_firecrawl_flight_info(self, flight_info: Dict[str, Any]) -> str:
+        """Format Firecrawl flight information for LLM consumption"""
+        try:
+            origin = flight_info.get("origin", "")
+            destination = flight_info.get("destination", "")
+            sources = flight_info.get("sources", [])
+            combined_content = flight_info.get("combined_content", "")
+            
+            formatted = f"✈️ **{origin}到{destination}的航班信息** (实时数据)\n\n"
+            
+            if sources:
+                formatted += "📚 **信息来源:**\n"
+                for i, source in enumerate(sources[:3], 1):
+                    title = source.get("title", "无标题")
+                    url = source.get("url", "")
+                    formatted += f"{i}. {title}\n   {url}\n"
+                formatted += "\n"
+            
+            # Truncate content if too long
+            if len(combined_content) > 2000:
+                combined_content = combined_content[:2000] + "..."
+            
+            formatted += f"📝 **航班详情:**\n{combined_content}\n\n"
+            formatted += "💡 *以上信息来自实时网页抓取，请以最新数据为准*"
+            
+            return formatted
+            
+        except Exception as e:
+            logger.error(f"Error formatting Firecrawl flight info: {e}")
+            return "获取实时航班信息时出现错误"
+
+    def _format_firecrawl_hotel_info(self, hotel_info: Dict[str, Any]) -> str:
+        """Format Firecrawl hotel information for LLM consumption"""
+        try:
+            destination = hotel_info.get("destination", "")
+            check_in = hotel_info.get("check_in", "")
+            check_out = hotel_info.get("check_out", "")
+            sources = hotel_info.get("sources", [])
+            combined_content = hotel_info.get("combined_content", "")
+            
+            formatted = f"🏨 **{destination}的酒店信息** (实时数据)\n\n"
+            
+            if check_in and check_out:
+                formatted += f"📅 **入住日期:** {check_in} - {check_out}\n\n"
+            
+            if sources:
+                formatted += "📚 **信息来源:**\n"
+                for i, source in enumerate(sources[:3], 1):
+                    title = source.get("title", "无标题")
+                    url = source.get("url", "")
+                    formatted += f"{i}. {title}\n   {url}\n"
+                formatted += "\n"
+            
+            # Truncate content if too long
+            if len(combined_content) > 2000:
+                combined_content = combined_content[:2000] + "..."
+            
+            formatted += f"📝 **酒店详情:**\n{combined_content}\n\n"
+            formatted += "💡 *以上信息来自实时网页抓取，请以最新数据为准*"
+            
+            return formatted
+            
+        except Exception as e:
+            logger.error(f"Error formatting Firecrawl hotel info: {e}")
+            return "获取实时酒店信息时出现错误"
+
+    async def get_influencer_hotel_recommendations(self, destination: str, platform: str = "xiaohongshu") -> Optional[str]:
+        """
+        Get influencer hotel recommendations from social media platforms
+        
+        Args:
+            destination: Destination city
+            platform: Platform to search ("xiaohongshu", "instagram", "both")
+            
+        Returns:
+            Formatted influencer hotel information string or None if failed
+        """
+        try:
+            logger.info(f"Getting influencer hotel recommendations for {destination} from {platform}")
+            
+            # Get influencer hotel info from Firecrawl
+            influencer_info = await firecrawl_service.get_influencer_hotels(destination, platform)
+            
+            if not influencer_info:
+                return None
+            
+            # Format the information for LLM
+            formatted_info = self._format_influencer_hotel_info(influencer_info)
+            
+            return formatted_info
+            
+        except Exception as e:
+            logger.error(f"Error getting influencer hotel recommendations for {destination}: {e}")
+            return None
+
+    def _format_influencer_hotel_info(self, influencer_info: Dict[str, Any]) -> str:
+        """Format influencer hotel information for LLM consumption"""
+        try:
+            destination = influencer_info.get("destination", "")
+            platform = influencer_info.get("platform", "")
+            influencer_posts = influencer_info.get("influencer_posts", [])
+            hotel_recommendations = influencer_info.get("hotel_recommendations", [])
+            
+            formatted = f"🌟 **{destination}网红酒店推荐** (来自{platform}平台)\n\n"
+            
+            # Add influencer posts section
+            if influencer_posts:
+                formatted += "📱 **网红博主推荐:**\n"
+                for i, post in enumerate(influencer_posts[:5], 1):
+                    title = post.get("title", "无标题")
+                    platform_name = post.get("platform", "未知平台")
+                    content_preview = post.get("content_preview", "")
+                    url = post.get("url", "")
+                    
+                    formatted += f"{i}. **{title}** ({platform_name})\n"
+                    formatted += f"   {content_preview}\n"
+                    if url:
+                        formatted += f"   🔗 {url}\n"
+                    formatted += "\n"
+            
+            # Add hotel recommendations section
+            if hotel_recommendations:
+                formatted += "🏨 **精选酒店推荐:**\n"
+                for i, hotel in enumerate(hotel_recommendations[:5], 1):
+                    hotel_name = hotel.get("hotel_name", "未知酒店")
+                    price_range = hotel.get("price_range", "")
+                    rating = hotel.get("rating", "")
+                    highlights = hotel.get("highlights", [])
+                    platform_name = hotel.get("platform", "未知平台")
+                    source_url = hotel.get("source_url", "")
+                    
+                    formatted += f"{i}. **{hotel_name}** ({platform_name})\n"
+                    if price_range:
+                        formatted += f"   💰 价格: {price_range}\n"
+                    if rating:
+                        formatted += f"   ⭐ 评分: {rating}\n"
+                    if highlights:
+                        formatted += f"   ✨ 亮点: {', '.join(highlights[:3])}\n"
+                    if source_url:
+                        formatted += f"   🔗 {source_url}\n"
+                    formatted += "\n"
+            
+            formatted += "💡 *以上推荐来自社交媒体平台，仅供参考，请以实际预订信息为准*"
+            
+            return formatted
+            
+        except Exception as e:
+            logger.error(f"Error formatting influencer hotel info: {e}")
+            return "获取网红酒店推荐时出现错误"

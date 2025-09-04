@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     tavily_token: str = Field(..., description="Tavily API key")
     amadeus_api_key: str = Field(default="", description="Amadeus API key")
     amadeus_api_secret: str = Field(default="", description="Amadeus API secret")
+    firecrawl_api_key: str = Field(default="fc-cbfa8f1f59d94a3a94faaf848f68e9a9", description="Firecrawl API key")
 
 
 # Global settings instance

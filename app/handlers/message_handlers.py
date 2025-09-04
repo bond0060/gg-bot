@@ -719,6 +719,9 @@ class MessageHandlers:
                     # Check if this is a hotel query with destination - add hotel image
                     elif any(keyword in message_text.lower() for keyword in ["酒店", "hotel", "住宿", "宾馆", "旅馆"]) and any(dest in message_text.lower() for dest in ["东京", "tokyo", "纽约", "new york", "巴黎", "paris", "伦敦", "london"]):
                         await self._send_hotel_response_with_media(update, response, message_text, chat_id)
+                    # Check if this is an influencer hotel query
+                    elif any(keyword in message_text.lower() for keyword in ["网红酒店", "influencer hotel", "博主推荐", "达人推荐", "小红书", "instagram", "网红", "打卡酒店"]):
+                        await self._send_influencer_hotel_response(update, response, message_text, chat_id)
                     else:
                         await update.message.reply_text(response, parse_mode="Markdown")
                 else:
@@ -1110,6 +1113,47 @@ class MessageHandlers:
                 return normalized_name
         
         return None
+
+    async def _send_influencer_hotel_response(
+        self, 
+        update: Update, 
+        response: str, 
+        message_text: str, 
+        chat_id: int
+    ):
+        """Send influencer hotel response with social media data"""
+        try:
+            # Extract destination from message
+            destination = self._extract_destination_from_message(message_text)
+            
+            if destination:
+                # Determine platform preference
+                platform = "both"  # Default to both platforms
+                if "小红书" in message_text or "xiaohongshu" in message_text.lower():
+                    platform = "xiaohongshu"
+                elif "instagram" in message_text.lower():
+                    platform = "instagram"
+                
+                # Get influencer hotel recommendations
+                influencer_info = await self.llm_service.get_influencer_hotel_recommendations(destination, platform)
+                
+                if influencer_info:
+                    # Send text response first
+                    await update.message.reply_text(response, parse_mode="Markdown")
+                    
+                    # Send influencer hotel information
+                    await update.message.reply_text(influencer_info, parse_mode="Markdown")
+                else:
+                    # Fallback to regular response
+                    await update.message.reply_text(response, parse_mode="Markdown")
+            else:
+                # Fallback to regular response
+                await update.message.reply_text(response, parse_mode="Markdown")
+                
+        except Exception as e:
+            logger.error(f"Error sending influencer hotel response: {e}")
+            # Fallback to regular response
+            await update.message.reply_text(response, parse_mode="Markdown")
 
     def _is_bot_mentioned(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         """
