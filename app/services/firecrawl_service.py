@@ -202,6 +202,257 @@ class FirecrawlService:
             logger.error(f"Error getting hotel info for {destination}: {e}")
             return None
 
+    async def get_tripadvisor_hotel_ratings(self, destination: str, hotel_names: List[str] = None) -> Dict[str, Any]:
+        """
+        Get TripAdvisor ratings for hotels in a destination
+        
+        Args:
+            destination: Destination city
+            hotel_names: List of specific hotel names to search for
+            
+        Returns:
+            Dict containing TripAdvisor ratings for hotels
+        """
+        try:
+            logger.info(f"Getting TripAdvisor ratings for {destination}")
+            
+            tripadvisor_ratings = {}
+            
+            if hotel_names:
+                # Search for specific hotels
+                for hotel_name in hotel_names[:5]:  # Limit to 5 hotels
+                    rating_info = await self._search_tripadvisor_hotel(hotel_name, destination)
+                    if rating_info:
+                        tripadvisor_ratings[hotel_name] = rating_info
+            else:
+                # Search for top hotels in destination
+                query = f"site:tripadvisor.com {destination} hotels best rated"
+                results = await self.search_and_scrape(query, num_results=3)
+                
+                for result in results:
+                    content = result.get("content", "")
+                    url = result.get("url", "")
+                    
+                    # Extract hotel information from TripAdvisor content
+                    hotels = self._parse_tripadvisor_hotels(content)
+                    for hotel in hotels:
+                        hotel_name = hotel.get("name", "")
+                        if hotel_name:
+                            tripadvisor_ratings[hotel_name] = {
+                                "rating": hotel.get("rating", ""),
+                                "review_count": hotel.get("review_count", ""),
+                                "url": url,
+                                "rank": hotel.get("rank", "")
+                            }
+            
+            return tripadvisor_ratings
+            
+        except Exception as e:
+            logger.error(f"Error getting TripAdvisor ratings for {destination}: {e}")
+            return {}
+
+    async def _search_tripadvisor_hotel(self, hotel_name: str, destination: str) -> Optional[Dict[str, Any]]:
+        """Search for specific hotel on TripAdvisor"""
+        try:
+            query = f"site:tripadvisor.com {hotel_name} {destination} hotel"
+            results = await self.search_and_scrape(query, num_results=1)
+            
+            if results:
+                content = results[0].get("content", "")
+                url = results[0].get("url", "")
+                
+                # Parse hotel rating from content
+                rating_info = self._parse_tripadvisor_rating(content)
+                if rating_info:
+                    rating_info["url"] = url
+                    return rating_info
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error searching TripAdvisor for {hotel_name}: {e}")
+            return None
+
+    def _parse_tripadvisor_hotels(self, content: str) -> List[Dict[str, Any]]:
+        """Parse hotel information from TripAdvisor content"""
+        try:
+            import re
+            
+            hotels = []
+            
+            # Look for hotel rating patterns
+            rating_patterns = [
+                r'(\d+\.?\d*)\s*out of 5\s*bubbles?',
+                r'(\d+\.?\d*)\s*\/\s*5',
+                r'Rating:\s*(\d+\.?\d*)',
+                r'(\d+\.?\d*)\s*stars?'
+            ]
+            
+            # Look for review count patterns
+            review_patterns = [
+                r'(\d+)\s*reviews?',
+                r'(\d+)\s*ratings?',
+                r'(\d+)\s*opinions?'
+            ]
+            
+            # Split content into lines and look for hotel entries
+            lines = content.split('\n')
+            current_hotel = {}
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Look for hotel name patterns
+                if any(keyword in line.lower() for keyword in ['hotel', 'resort', 'inn', 'suite', 'lodge']):
+                    # Extract rating
+                    rating = None
+                    for pattern in rating_patterns:
+                        match = re.search(pattern, line, re.IGNORECASE)
+                        if match:
+                            rating = match.group(1)
+                            break
+                    
+                    # Extract review count
+                    review_count = None
+                    for pattern in review_patterns:
+                        match = re.search(pattern, line, re.IGNORECASE)
+                        if match:
+                            review_count = match.group(1)
+                            break
+                    
+                    if rating or review_count:
+                        hotel_name = line[:100]  # Take first 100 chars as hotel name
+                        hotels.append({
+                            "name": hotel_name,
+                            "rating": rating,
+                            "review_count": review_count,
+                            "rank": len(hotels) + 1
+                        })
+            
+            return hotels[:10]  # Return max 10 hotels
+            
+        except Exception as e:
+            logger.error(f"Error parsing TripAdvisor hotels: {e}")
+            return []
+
+    def _parse_tripadvisor_rating(self, content: str) -> Optional[Dict[str, Any]]:
+        """Parse rating information from TripAdvisor content"""
+        try:
+            import re
+            
+            # Look for rating patterns
+            rating_patterns = [
+                r'(\d+\.?\d*)\s*out of 5\s*bubbles?',
+                r'(\d+\.?\d*)\s*\/\s*5',
+                r'Rating:\s*(\d+\.?\d*)',
+                r'(\d+\.?\d*)\s*stars?'
+            ]
+            
+            # Look for review count patterns
+            review_patterns = [
+                r'(\d+)\s*reviews?',
+                r'(\d+)\s*ratings?',
+                r'(\d+)\s*opinions?'
+            ]
+            
+            rating = None
+            review_count = None
+            
+            for pattern in rating_patterns:
+                match = re.search(pattern, content, re.IGNORECASE)
+                if match:
+                    rating = match.group(1)
+                    break
+            
+            for pattern in review_patterns:
+                match = re.search(pattern, content, re.IGNORECASE)
+                if match:
+                    review_count = match.group(1)
+                    break
+            
+            if rating or review_count:
+                return {
+                    "rating": rating,
+                    "review_count": review_count
+                }
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error parsing TripAdvisor rating: {e}")
+            return None
+
+    async def get_instagram_hotel_posts(self, hotel_name: str, destination: str = None) -> Optional[Dict[str, Any]]:
+        """
+        Get Instagram search results for a specific hotel using Google search
+        
+        Args:
+            hotel_name: Name of the hotel
+            destination: Destination city (optional)
+            
+        Returns:
+            Dict containing Instagram search information or None if failed
+        """
+        try:
+            logger.info(f"Getting Instagram search results for hotel: {hotel_name}")
+            
+            # Build search query for Instagram content
+            if destination:
+                search_query = f"site:instagram.com {hotel_name} {destination} hotel"
+            else:
+                search_query = f"site:instagram.com {hotel_name} hotel"
+            
+            # Use Google search to find Instagram posts
+            from search.google_search import search_web
+            search_results = search_web(search_query)
+            
+            if not search_results:
+                logger.info(f"No Instagram results found for {hotel_name}")
+                return None
+            
+            # Filter and format Instagram links
+            instagram_links = []
+            for result in search_results[:3]:  # Limit to 3 results
+                if isinstance(result, dict):
+                    url = result.get('url', '')
+                    title = result.get('title', '')
+                    snippet = result.get('content', '') or result.get('snippet', '')
+                    
+                    if 'instagram.com' in url and ('/p/' in url or '/reel/' in url or '/explore/' in url):
+                        instagram_links.append({
+                            'url': url,
+                            'title': title,
+                            'snippet': snippet
+                        })
+            
+            if not instagram_links:
+                logger.info(f"No valid Instagram posts found for {hotel_name}")
+                return None
+            
+            # Generate a general Instagram search URL as fallback
+            import urllib.parse
+            if destination:
+                hashtag_query = f"{hotel_name.replace(' ', '')}{destination.replace(' ', '')}hotel"
+            else:
+                hashtag_query = f"{hotel_name.replace(' ', '')}hotel"
+            
+            hashtag_url = f"https://www.instagram.com/explore/tags/{urllib.parse.quote(hashtag_query)}"
+            
+            return {
+                "hotel_name": hotel_name,
+                "destination": destination,
+                "search_query": search_query,
+                "instagram_posts": instagram_links,
+                "hashtag_url": hashtag_url,
+                "platform": "instagram"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting Instagram search results for {hotel_name}: {e}")
+            return None
+
     async def get_influencer_hotels(self, destination: str, platform: str = "xiaohongshu") -> Optional[Dict[str, Any]]:
         """
         Get influencer hotel recommendations from social media platforms

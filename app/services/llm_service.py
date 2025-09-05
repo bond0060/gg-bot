@@ -2543,7 +2543,8 @@ Guidelines:
                 destination_hashtag = self._get_destination_hashtag(destination)
                 
                 # Create search URL with separate hashtags (brand + destination)
-                # Use Instagram's search with multiple hashtags separated by space
+                # Instagram URL can only contain one hashtag, so we use the brand hashtag
+                # Users can manually add the destination hashtag in the search
                 search_hashtags = f"{clean_brand} {destination_hashtag}"
                 instagram_search_url = f"https://www.instagram.com/explore/tags/{clean_brand}/"
                 
@@ -2820,9 +2821,8 @@ Guidelines:
                         match = re.search(r'^[-•]\s*([^-•\n]+?)(?:\s*-\s*|$)', line)
                         if match:
                             hotel_name = match.group(1).strip()
-                            # Clean up the name
-                            hotel_name = re.sub(r'\s*\([^)]*\)$', '', hotel_name)
-                            hotel_name = re.sub(r'\s*（[^）]*）$', '', hotel_name)
+                            # Keep the full hotel name including parentheses for button generation
+                            # Don't remove parentheses as they contain important English names
                             if hotel_name and len(hotel_name) > 3:
                                 hotel_names.append(hotel_name)
             
