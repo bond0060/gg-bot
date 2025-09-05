@@ -2562,26 +2562,59 @@ Guidelines:
         try:
             # Map destinations to their Instagram-friendly hashtags
             destination_mapping = {
-                "nagoya": "nagoya",
-                "tokyo": "tokyo", 
-                "osaka": "osaka",
-                "kyoto": "kyoto",
-                "shanghai": "shanghai",
-                "beijing": "beijing",
-                "hong_kong": "hongkong",
-                "taipei": "taipei",
-                "seoul": "seoul",
-                "singapore": "singapore",
-                "kuala_lumpur": "kualalumpur",
-                "bangkok": "bangkok",
-                "paris": "paris",
-                "london": "london",
-                "new_york": "newyork",
-                "los_angeles": "losangeles",
-                "sydney": "sydney",
-                "melbourne": "melbourne",
-                "phu_quoc": "phuquoc",
-                "bali": "bali"
+                # 中国城市
+                "nagoya": "nagoya", "tokyo": "tokyo", "osaka": "osaka", "kyoto": "kyoto",
+                "shanghai": "shanghai", "beijing": "beijing", "hong_kong": "hongkong",
+                "taipei": "taipei", "seoul": "seoul", "singapore": "singapore",
+                "kuala_lumpur": "kualalumpur", "bangkok": "bangkok", "paris": "paris",
+                "london": "london", "new_york": "newyork", "los_angeles": "losangeles",
+                "sydney": "sydney", "melbourne": "melbourne", "phu_quoc": "phuquoc",
+                "bali": "bali",
+                # 东南亚
+                "phuket": "phuket", "koh_samui": "kohsamui", "chiang_mai": "chiangmai",
+                "chiang_rai": "chiangrai", "krabi": "krabi", "hua_hin": "huahin",
+                "pattaya": "pattaya", "manila": "manila", "cebu": "cebu",
+                "boracay": "boracay", "hanoi": "hanoi", "ho_chi_minh": "hochiminh",
+                "da_nang": "danang", "hoi_an": "hoian", "nha_trang": "nhatrang",
+                "da_lat": "dalat", "jakarta": "jakarta", "yogyakarta": "yogyakarta",
+                "surabaya": "surabaya", "medan": "medan", "penang": "penang",
+                "malacca": "malacca", "langkawi": "langkawi", "sabah": "sabah",
+                "sarawak": "sarawak",
+                # 东亚
+                "fukuoka": "fukuoka", "hiroshima": "hiroshima", "sapporo": "sapporo",
+                "sendai": "sendai", "yokohama": "yokohama", "kobe": "kobe",
+                "nara": "nara", "okinawa": "okinawa", "busan": "busan",
+                "jeju": "jeju", "daegu": "daegu", "gwangju": "gwangju",
+                "daejeon": "daejeon", "incheon": "incheon",
+                # 欧洲
+                "rome": "rome", "milan": "milan", "venice": "venice",
+                "florence": "florence", "naples": "naples", "barcelona": "barcelona",
+                "madrid": "madrid", "seville": "seville", "berlin": "berlin",
+                "munich": "munich", "hamburg": "hamburg", "amsterdam": "amsterdam",
+                "rotterdam": "rotterdam", "brussels": "brussels", "vienna": "vienna",
+                "salzburg": "salzburg", "zurich": "zurich", "geneva": "geneva",
+                "prague": "prague", "budapest": "budapest", "warsaw": "warsaw",
+                "stockholm": "stockholm", "copenhagen": "copenhagen", "oslo": "oslo",
+                "helsinki": "helsinki", "moscow": "moscow", "st_petersburg": "stpetersburg",
+                # 北美
+                "san_francisco": "sanfrancisco", "las_vegas": "lasvegas",
+                "miami": "miami", "chicago": "chicago", "boston": "boston",
+                "washington_dc": "washington", "seattle": "seattle",
+                "toronto": "toronto", "vancouver": "vancouver", "montreal": "montreal",
+                # 大洋洲
+                "brisbane": "brisbane", "perth": "perth", "adelaide": "adelaide",
+                "auckland": "auckland", "wellington": "wellington", "christchurch": "christchurch",
+                # 中东
+                "dubai": "dubai", "abu_dhabi": "abudhabi", "doha": "doha",
+                "kuwait": "kuwait", "riyadh": "riyadh", "jeddah": "jeddah",
+                "istanbul": "istanbul", "ankara": "ankara",
+                # 非洲
+                "cairo": "cairo", "cape_town": "capetown", "johannesburg": "johannesburg",
+                "nairobi": "nairobi", "lagos": "lagos",
+                # 南美
+                "sao_paulo": "saopaulo", "rio_de_janeiro": "riodejaneiro",
+                "buenos_aires": "buenosaires", "lima": "lima", "santiago": "santiago",
+                "bogota": "bogota", "caracas": "caracas"
             }
             
             # Get the hashtag, default to destination if not found
