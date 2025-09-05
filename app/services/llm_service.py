@@ -2548,8 +2548,8 @@ Guidelines:
                 search_hashtags = f"{clean_brand} {destination_hashtag}"
                 instagram_search_url = f"https://www.instagram.com/explore/tags/{clean_brand}/"
                 
-                # Create button data with two hashtags display
-                button_text = f"📱 {hotel_name}\n#{clean_brand} #{destination_hashtag}"
+                # Create button data with English name only
+                button_text = english_name
                 buttons.append({
                     "text": button_text,
                     "url": instagram_search_url
