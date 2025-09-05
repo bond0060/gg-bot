@@ -56,6 +56,22 @@ class LLMService:
             generated_response = response.choices[0].message.content.strip()
             logger.info("Successfully generated LLM response")
             
+            # Check if this is a hotel query and add TripAdvisor ratings
+            if self._is_hotel_query(message):
+                logger.info(f"Detected hotel query: {message}")
+                destination = self._extract_destination_from_message(message)
+                logger.info(f"Extracted destination: {destination}")
+                if destination:
+                    # Add TripAdvisor ratings
+                    tripadvisor_info = await self._get_tripadvisor_info_for_destination(destination)
+                    if tripadvisor_info:
+                        generated_response += f"\n\n{tripadvisor_info}"
+                    
+                    # Note: Instagram links are now handled as buttons in the message handler
+                    logger.info("Hotel query detected - Instagram buttons will be added by message handler")
+                else:
+                    logger.info("No destination extracted from hotel query")
+            
             # Generate smart LLM-based follow-up questions
             follow_up_questions = await follow_up_service.generate_smart_follow_up_questions(
                 message, generated_response, context, max_questions=2
@@ -1036,7 +1052,11 @@ Key guidelines:
 - Provide practical, actionable travel advice with SPECIFIC details
 - Consider budget, preferences, and group dynamics
 - For flight queries: Provide specific flight numbers, times, airlines, and price ranges
-- For hotel queries: Include hotel names, ratings, prices, and booking links
+- For hotel queries: Use the EXACT format below for each hotel recommendation:
+  - Hotel Name (local + English if available)
+  - TripAdvisor评分：[rating]/5
+  - 价格范围：[price range]
+  - 优势：[key highlights & why it's recommended]
 - For activities: Suggest specific attractions, opening hours, and ticket prices
 - Always provide multiple options when possible
 - Include practical tips (airport transfers, best times to visit, etc.)
@@ -2087,6 +2107,12 @@ Guidelines:
             if not hotel_info:
                 return None
             
+            # Get TripAdvisor ratings
+            tripadvisor_ratings = await firecrawl_service.get_tripadvisor_hotel_ratings(destination)
+            
+            # Add TripAdvisor ratings to hotel info
+            hotel_info["tripadvisor_ratings"] = tripadvisor_ratings
+            
             # Format the information for LLM
             formatted_info = self._format_firecrawl_hotel_info(hotel_info)
             
@@ -2166,11 +2192,33 @@ Guidelines:
             check_out = hotel_info.get("check_out", "")
             sources = hotel_info.get("sources", [])
             combined_content = hotel_info.get("combined_content", "")
+            tripadvisor_ratings = hotel_info.get("tripadvisor_ratings", {})
             
             formatted = f"🏨 **{destination}的酒店信息** (实时数据)\n\n"
             
             if check_in and check_out:
                 formatted += f"📅 **入住日期:** {check_in} - {check_out}\n\n"
+            
+            # Add TripAdvisor ratings section
+            if tripadvisor_ratings:
+                formatted += "⭐ **TripAdvisor评分:**\n"
+                for hotel_name, rating_info in list(tripadvisor_ratings.items())[:5]:
+                    rating = rating_info.get("rating", "")
+                    review_count = rating_info.get("review_count", "")
+                    url = rating_info.get("url", "")
+                    rank = rating_info.get("rank", "")
+                    
+                    formatted += f"• **{hotel_name}**"
+                    if rating:
+                        formatted += f" - {rating}/5"
+                    if review_count:
+                        formatted += f" ({review_count}条评价)"
+                    if rank:
+                        formatted += f" (排名#{rank})"
+                    if url:
+                        formatted += f"\n  🔗 {url}"
+                    formatted += "\n"
+                formatted += "\n"
             
             if sources:
                 formatted += "📚 **信息来源:**\n"
@@ -2213,6 +2261,14 @@ Guidelines:
             if not influencer_info:
                 return None
             
+            # Get TripAdvisor ratings for the recommended hotels
+            hotel_recommendations = influencer_info.get("hotel_recommendations", [])
+            hotel_names = [hotel.get("hotel_name", "") for hotel in hotel_recommendations if hotel.get("hotel_name")]
+            
+            if hotel_names:
+                tripadvisor_ratings = await firecrawl_service.get_tripadvisor_hotel_ratings(destination, hotel_names)
+                influencer_info["tripadvisor_ratings"] = tripadvisor_ratings
+            
             # Format the information for LLM
             formatted_info = self._format_influencer_hotel_info(influencer_info)
             
@@ -2229,6 +2285,7 @@ Guidelines:
             platform = influencer_info.get("platform", "")
             influencer_posts = influencer_info.get("influencer_posts", [])
             hotel_recommendations = influencer_info.get("hotel_recommendations", [])
+            tripadvisor_ratings = influencer_info.get("tripadvisor_ratings", {})
             
             formatted = f"🌟 **{destination}网红酒店推荐** (来自{platform}平台)\n\n"
             
@@ -2269,6 +2326,27 @@ Guidelines:
                         formatted += f"   🔗 {source_url}\n"
                     formatted += "\n"
             
+            # Add TripAdvisor ratings section
+            if tripadvisor_ratings:
+                formatted += "⭐ **TripAdvisor评分参考:**\n"
+                for hotel_name, rating_info in list(tripadvisor_ratings.items())[:5]:
+                    rating = rating_info.get("rating", "")
+                    review_count = rating_info.get("review_count", "")
+                    url = rating_info.get("url", "")
+                    rank = rating_info.get("rank", "")
+                    
+                    formatted += f"• **{hotel_name}**"
+                    if rating:
+                        formatted += f" - {rating}/5"
+                    if review_count:
+                        formatted += f" ({review_count}条评价)"
+                    if rank:
+                        formatted += f" (排名#{rank})"
+                    if url:
+                        formatted += f"\n  🔗 {url}"
+                    formatted += "\n"
+                formatted += "\n"
+            
             formatted += "💡 *以上推荐来自社交媒体平台，仅供参考，请以实际预订信息为准*"
             
             return formatted
@@ -2276,3 +2354,317 @@ Guidelines:
         except Exception as e:
             logger.error(f"Error formatting influencer hotel info: {e}")
             return "获取网红酒店推荐时出现错误"
+
+    def _is_hotel_query(self, message: str) -> bool:
+        """Check if the message is asking about hotels"""
+        hotel_keywords = [
+            "酒店", "hotel", "住宿", "宾馆", "旅馆", "resort", "boutique", 
+            "accommodation", "lodging", "inn", "suite", "lodge"
+        ]
+        message_lower = message.lower()
+        return any(keyword in message_lower for keyword in hotel_keywords)
+
+    def _extract_destination_from_message(self, message: str) -> Optional[str]:
+        """Extract destination from message text"""
+        message_lower = message.lower()
+        
+        # Map of destination keywords to normalized names
+        destination_map = {
+            "东京": "tokyo",
+            "tokyo": "tokyo",
+            "纽约": "new_york", 
+            "new york": "new_york",
+            "巴黎": "paris",
+            "paris": "paris",
+            "伦敦": "london",
+            "london": "london",
+            "大阪": "osaka",
+            "osaka": "osaka",
+            "京都": "kyoto",
+            "kyoto": "kyoto",
+            "首尔": "seoul",
+            "seoul": "seoul",
+            "新加坡": "singapore",
+            "singapore": "singapore",
+            "北京": "beijing",
+            "beijing": "beijing",
+            "上海": "shanghai",
+            "shanghai": "shanghai",
+            "香港": "hong_kong",
+            "hong kong": "hong_kong",
+            "台北": "taipei",
+            "taipei": "taipei"
+        }
+        
+        for keyword, normalized_name in destination_map.items():
+            if keyword in message_lower:
+                return normalized_name
+        
+        return None
+
+    async def _get_tripadvisor_info_for_destination(self, destination: str) -> Optional[str]:
+        """Get TripAdvisor information for a destination"""
+        try:
+            # Get TripAdvisor ratings
+            tripadvisor_ratings = await firecrawl_service.get_tripadvisor_hotel_ratings(destination)
+            
+            if not tripadvisor_ratings:
+                return None
+            
+            # Format TripAdvisor information
+            formatted = "⭐ **TripAdvisor评分参考:**\n"
+            for hotel_name, rating_info in list(tripadvisor_ratings.items())[:5]:
+                rating = rating_info.get("rating", "")
+                review_count = rating_info.get("review_count", "")
+                url = rating_info.get("url", "")
+                rank = rating_info.get("rank", "")
+                
+                formatted += f"• **{hotel_name}**"
+                if rating:
+                    formatted += f" - {rating}/5"
+                if review_count:
+                    formatted += f" ({review_count}条评价)"
+                if rank:
+                    formatted += f" (排名#{rank})"
+                if url:
+                    formatted += f"\n  🔗 {url}"
+                formatted += "\n"
+            
+            formatted += "\n💡 *以上评分来自TripAdvisor，仅供参考*"
+            
+            return formatted
+            
+        except Exception as e:
+            logger.error(f"Error getting TripAdvisor info for {destination}: {e}")
+            return None
+
+    async def _get_instagram_links_for_hotels(self, response_text: str, destination: str) -> Optional[str]:
+        """Get Instagram search result links for hotels mentioned in the response"""
+        try:
+            logger.info(f"Extracting hotel names from response: {response_text[:200]}...")
+            # Extract hotel names from the response
+            hotel_names = self._extract_hotel_names_from_response(response_text)
+            logger.info(f"Extracted hotel names: {hotel_names}")
+            
+            if not hotel_names:
+                logger.info("No hotel names extracted from response")
+                return None
+            
+            # Get Instagram search URLs for each hotel
+            all_links = []
+            for hotel_name in hotel_names[:3]:  # Limit to 3 hotels
+                logger.info(f"Getting Instagram search for hotel: {hotel_name}")
+                ig_search = await firecrawl_service.get_instagram_hotel_posts(hotel_name, destination)
+                logger.info(f"Instagram search result: {ig_search}")
+                if ig_search:
+                    all_links.append({
+                        "hotel_name": hotel_name,
+                        "instagram_posts": ig_search.get("instagram_posts", []),
+                        "hashtag_url": ig_search.get("hashtag_url", ""),
+                        "search_query": ig_search.get("search_query", "")
+                    })
+            
+            logger.info(f"All links collected: {all_links}")
+            if not all_links:
+                logger.info("No valid Instagram links found")
+                return None
+            
+            # Format Instagram search links as buttons
+            formatted = "\n\n📱 **查看酒店Instagram内容:**\n\n"
+            
+            for i, hotel_data in enumerate(all_links[:3], 1):  # Limit to 3 hotels
+                hotel_name = hotel_data["hotel_name"]
+                
+                # Extract English name from hotel name
+                english_name = self._extract_english_name_from_hotel(hotel_name)
+                
+                # Create Instagram search URL for the hotel using English name
+                # Clean the English name for Instagram hashtag (remove special characters, convert to lowercase)
+                clean_name = english_name.lower()
+                clean_name = ''.join(c for c in clean_name if c.isalnum())  # Keep only alphanumeric characters
+                instagram_search_url = f"https://www.instagram.com/explore/tags/{clean_name}/"
+                
+                # Create button format
+                formatted += f"🔘 **{i}. {hotel_name}**\n"
+                formatted += f"   👆 [点击查看Instagram内容]({instagram_search_url})\n\n"
+            
+            formatted += "💡 *点击按钮查看Instagram上的真实用户分享和照片*"
+            
+            return formatted
+            
+        except Exception as e:
+            logger.error(f"Error getting Instagram links for hotels: {e}")
+            return None
+
+    async def _get_instagram_buttons_for_hotels(self, response_text: str, destination: str) -> Optional[List[Dict[str, str]]]:
+        """Get Instagram button data for hotels mentioned in the response"""
+        try:
+            logger.info(f"Extracting hotel names from response: {response_text[:200]}...")
+            # Extract hotel names from the response
+            hotel_names = self._extract_hotel_names_from_response(response_text)
+            logger.info(f"Extracted hotel names: {hotel_names}")
+            
+            if not hotel_names:
+                logger.info("No hotel names extracted from response")
+                return None
+            
+            # Get Instagram search URLs for each hotel
+            all_links = []
+            for hotel_name in hotel_names[:3]:  # Limit to 3 hotels
+                logger.info(f"Getting Instagram search for hotel: {hotel_name}")
+                ig_search = await firecrawl_service.get_instagram_hotel_posts(hotel_name, destination)
+                logger.info(f"Instagram search result: {ig_search}")
+                if ig_search:
+                    all_links.append({
+                        "hotel_name": hotel_name,
+                        "instagram_posts": ig_search.get("instagram_posts", []),
+                        "hashtag_url": ig_search.get("hashtag_url", ""),
+                        "search_query": ig_search.get("search_query", "")
+                    })
+            
+            logger.info(f"All links collected: {all_links}")
+            
+            # Create button data - generate buttons for all extracted hotels, even if Instagram search failed
+            buttons = []
+            for i, hotel_name in enumerate(hotel_names[:3], 1):  # Limit to 3 hotels
+                # Extract English name from hotel name
+                english_name = self._extract_english_name_from_hotel(hotel_name)
+                
+                # Create Instagram search URL for the hotel using English name
+                # Clean the English name for Instagram hashtag (remove special characters, convert to lowercase)
+                clean_name = english_name.lower()
+                clean_name = ''.join(c for c in clean_name if c.isalnum())  # Keep only alphanumeric characters
+                instagram_search_url = f"https://www.instagram.com/explore/tags/{clean_name}/"
+                
+                # Create button data
+                buttons.append({
+                    "text": f"📱 {hotel_name}",
+                    "url": instagram_search_url
+                })
+            
+            logger.info(f"Generated {len(buttons)} Instagram buttons")
+            return buttons
+            
+        except Exception as e:
+            logger.error(f"Error getting Instagram buttons for hotels: {e}")
+            return None
+
+    def _extract_english_name_from_hotel(self, hotel_name: str) -> str:
+        """Extract English name from hotel name for Instagram search"""
+        try:
+            import re
+            
+            # Look for English name in parentheses
+            # Pattern: 中文名 (English Name) or 中文名（English Name）
+            # Include comma, period, and other common punctuation in English names
+            english_match = re.search(r'[（(]([A-Za-z\s&,.\-]+)[）)]', hotel_name)
+            if english_match:
+                english_name = english_match.group(1).strip()
+                # Clean up the English name - remove extra spaces and special characters
+                # Keep only alphanumeric characters and remove spaces, commas, periods, etc.
+                english_name = re.sub(r'\s+', '', english_name)  # Remove spaces
+                english_name = re.sub(r'[^\w]', '', english_name)  # Keep only alphanumeric
+                if english_name and len(english_name) > 2:  # Make sure it's meaningful
+                    return english_name
+            
+            # If no parentheses found, try to extract from the end of the string
+            # Look for English words at the end
+            english_words = re.findall(r'[A-Za-z\s&]+', hotel_name)
+            if english_words:
+                # Take the last English word/phrase
+                last_english = english_words[-1].strip()
+                last_english = re.sub(r'\s+', '', last_english)  # Remove spaces
+                last_english = re.sub(r'[^\w]', '', last_english)  # Keep only alphanumeric
+                if last_english and len(last_english) > 2:  # Make sure it's meaningful
+                    return last_english
+            
+            # If no English found, try to extract meaningful English words from the beginning
+            # Look for English words at the start
+            english_words = re.findall(r'[A-Za-z\s&]+', hotel_name)
+            if english_words:
+                # Take the first English word/phrase
+                first_english = english_words[0].strip()
+                first_english = re.sub(r'\s+', '', first_english)  # Remove spaces
+                first_english = re.sub(r'[^\w]', '', first_english)  # Keep only alphanumeric
+                if first_english and len(first_english) > 2:  # Make sure it's meaningful
+                    return first_english
+            
+            # If still no English found, use a generic name based on the hotel name
+            # Extract the first meaningful part before any Chinese characters
+            chinese_match = re.search(r'^([A-Za-z\s&]+)', hotel_name)
+            if chinese_match:
+                generic_name = chinese_match.group(1).strip()
+                generic_name = re.sub(r'\s+', '', generic_name)  # Remove spaces
+                generic_name = re.sub(r'[^\w]', '', generic_name)  # Keep only alphanumeric
+                if generic_name and len(generic_name) > 2:
+                    return generic_name
+            
+            # Last resort: use a generic hotel name
+            return "Hotel"
+            
+        except Exception as e:
+            logger.error(f"Error extracting English name from {hotel_name}: {e}")
+            return "Hotel"
+
+    def _extract_hotel_names_from_response(self, response_text: str) -> List[str]:
+        """Extract hotel names from the response text"""
+        try:
+            import re
+            
+            hotel_names = []
+            lines = response_text.split('\n')
+            
+            for line in lines:
+                line = line.strip()
+                # Look for lines that start with "- " or number format and contain hotel indicators
+                if (line.startswith('- ') or re.match(r'^\d+\.', line)) and any(keyword in line.lower() for keyword in ['hotel', '酒店', 'resort', 'inn', 'suite', 'lodge']):
+                    # Skip lines that start with "优势：" or other descriptive text
+                    if line.startswith('优势：') or line.startswith('价格范围：') or line.startswith('TripAdvisor评分：'):
+                        continue
+                    
+                    # Extract hotel name (remove the "- " or "1. " prefix)
+                    if line.startswith('- '):
+                        hotel_name = line[2:].strip()
+                    else:
+                        # Remove number prefix (e.g., "1. " -> "")
+                        hotel_name = re.sub(r'^\d+\.\s*', '', line).strip()
+                    
+                    # Clean up the name (remove extra info in parentheses, etc.)
+                    hotel_name = re.sub(r'\s*\([^)]*\)$', '', hotel_name)  # Remove trailing parentheses
+                    hotel_name = re.sub(r'\s*（[^）]*）$', '', hotel_name)  # Remove trailing Chinese parentheses
+                    
+                    # Only add if it looks like a hotel name (not descriptive text)
+                    if (hotel_name and len(hotel_name) > 3 and 
+                        not hotel_name.startswith('优势：') and 
+                        not hotel_name.startswith('价格范围：') and
+                        not hotel_name.startswith('TripAdvisor评分：') and
+                        not '：' in hotel_name):  # Skip lines with colons (descriptive text)
+                        hotel_names.append(hotel_name)
+            
+            # If no hotels found with the above method, try a more general approach
+            if not hotel_names:
+                # Look for any line that contains hotel-related keywords
+                for line in lines:
+                    line = line.strip()
+                    if (any(keyword in line.lower() for keyword in ['hotel', '酒店', 'resort', 'inn', 'suite', 'lodge']) and
+                        not line.startswith('优势：') and 
+                        not line.startswith('价格范围：') and
+                        not line.startswith('TripAdvisor评分：') and
+                        not '：' in line):  # Skip descriptive lines
+                        # Try to extract hotel name from the line
+                        # Look for patterns like "Hotel Name -" or "酒店名称 -"
+                        match = re.search(r'^[-•]\s*([^-•\n]+?)(?:\s*-\s*|$)', line)
+                        if match:
+                            hotel_name = match.group(1).strip()
+                            # Clean up the name
+                            hotel_name = re.sub(r'\s*\([^)]*\)$', '', hotel_name)
+                            hotel_name = re.sub(r'\s*（[^）]*）$', '', hotel_name)
+                            if hotel_name and len(hotel_name) > 3:
+                                hotel_names.append(hotel_name)
+            
+            logger.info(f"Extracted hotel names: {hotel_names}")
+            return hotel_names[:5]  # Return max 5 hotel names
+            
+        except Exception as e:
+            logger.error(f"Error extracting hotel names from response: {e}")
+            return []

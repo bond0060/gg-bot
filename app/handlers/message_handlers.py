@@ -699,8 +699,12 @@ class MessageHandlers:
             else:
                 # No follow-up questions, check if we should add custom buttons
                 if response and response.strip():
+                    # Check if this is a hotel query FIRST - use influencer hotel response for Instagram buttons
+                    if any(keyword in message_text.lower() for keyword in ["酒店", "hotel", "住宿", "宾馆", "旅馆", "resort", "boutique", "accommodation", "lodging", "inn", "suite", "lodge"]):
+                        await self._send_influencer_hotel_response(update, response, message_text, chat_id)
+                    
                     # Check if this is a general travel query that could benefit from custom buttons
-                    if any(keyword in message_text.lower() for keyword in ["旅行", "旅游", "计划", "推荐", "帮助", "travel", "trip", "plan"]):
+                    elif any(keyword in message_text.lower() for keyword in ["旅行", "旅游", "计划", "推荐", "帮助", "travel", "trip", "plan"]):
                         # Add custom buttons for general travel assistance
                         custom_keyboard = inline_keyboard_service.create_custom_buttons(
                             chat_id, ["quick_flight", "book_hotel", "weather"]
@@ -715,13 +719,6 @@ class MessageHandlers:
                             )
                         else:
                             await update.message.reply_text(response, parse_mode="Markdown")
-                    
-                    # Check if this is a hotel query with destination - add hotel image
-                    elif any(keyword in message_text.lower() for keyword in ["酒店", "hotel", "住宿", "宾馆", "旅馆"]) and any(dest in message_text.lower() for dest in ["东京", "tokyo", "纽约", "new york", "巴黎", "paris", "伦敦", "london"]):
-                        await self._send_hotel_response_with_media(update, response, message_text, chat_id)
-                    # Check if this is an influencer hotel query
-                    elif any(keyword in message_text.lower() for keyword in ["网红酒店", "influencer hotel", "博主推荐", "达人推荐", "小红书", "instagram", "网红", "打卡酒店"]):
-                        await self._send_influencer_hotel_response(update, response, message_text, chat_id)
                     else:
                         await update.message.reply_text(response, parse_mode="Markdown")
                 else:
@@ -1053,17 +1050,24 @@ class MessageHandlers:
         message_text: str, 
         chat_id: int
     ):
-        """Send hotel response with hotel image"""
+        """Send hotel response with hotel image and TripAdvisor ratings"""
         try:
             # Extract destination from message
             destination = self._extract_destination_from_message(message_text)
             
             if destination:
-                # Get hotel media URLs for the destination
-                hotel_media_urls = self.llm_service.get_hotel_media_urls_for_destination(destination)
+                # Get real-time hotel info with TripAdvisor ratings
+                realtime_hotel_info = await self.llm_service.get_realtime_hotel_info(destination)
                 
                 # Send text response first
                 await update.message.reply_text(response, parse_mode="Markdown")
+                
+                # Send real-time hotel info with TripAdvisor ratings if available
+                if realtime_hotel_info:
+                    await update.message.reply_text(realtime_hotel_info, parse_mode="Markdown")
+                
+                # Get hotel media URLs for the destination
+                hotel_media_urls = self.llm_service.get_hotel_media_urls_for_destination(destination)
                 
                 # Send hotel image
                 await self.llm_service.send_media_with_text(
@@ -1105,7 +1109,95 @@ class MessageHandlers:
             "首尔": "seoul",
             "seoul": "seoul",
             "新加坡": "singapore",
-            "singapore": "singapore"
+            "singapore": "singapore",
+            "吉隆坡": "kuala_lumpur",
+            "kuala lumpur": "kuala_lumpur",
+            "曼谷": "bangkok",
+            "bangkok": "bangkok",
+            "台北": "taipei",
+            "taipei": "taipei",
+            "香港": "hong_kong",
+            "hong kong": "hong_kong",
+            "上海": "shanghai",
+            "shanghai": "shanghai",
+            "北京": "beijing",
+            "beijing": "beijing",
+            "深圳": "shenzhen",
+            "shenzhen": "shenzhen",
+            "广州": "guangzhou",
+            "guangzhou": "guangzhou",
+            "成都": "chengdu",
+            "chengdu": "chengdu",
+            "杭州": "hangzhou",
+            "hangzhou": "hangzhou",
+            "南京": "nanjing",
+            "nanjing": "nanjing",
+            "武汉": "wuhan",
+            "wuhan": "wuhan",
+            "西安": "xian",
+            "xian": "xian",
+            "重庆": "chongqing",
+            "chongqing": "chongqing",
+            "天津": "tianjin",
+            "tianjin": "tianjin",
+            "青岛": "qingdao",
+            "qingdao": "qingdao",
+            "大连": "dalian",
+            "dalian": "dalian",
+            "厦门": "xiamen",
+            "xiamen": "xiamen",
+            "苏州": "suzhou",
+            "suzhou": "suzhou",
+            "无锡": "wuxi",
+            "wuxi": "wuxi",
+            "宁波": "ningbo",
+            "ningbo": "ningbo",
+            "温州": "wenzhou",
+            "wenzhou": "wenzhou",
+            "福州": "fuzhou",
+            "fuzhou": "fuzhou",
+            "济南": "jinan",
+            "jinan": "jinan",
+            "石家庄": "shijiazhuang",
+            "shijiazhuang": "shijiazhuang",
+            "太原": "taiyuan",
+            "taiyuan": "taiyuan",
+            "呼和浩特": "hohhot",
+            "hohhot": "hohhot",
+            "沈阳": "shenyang",
+            "shenyang": "shenyang",
+            "长春": "changchun",
+            "changchun": "changchun",
+            "哈尔滨": "harbin",
+            "harbin": "harbin",
+            "合肥": "hefei",
+            "hefei": "hefei",
+            "南昌": "nanchang",
+            "nanchang": "nanchang",
+            "郑州": "zhengzhou",
+            "zhengzhou": "zhengzhou",
+            "长沙": "changsha",
+            "changsha": "changsha",
+            "南宁": "nanning",
+            "nanning": "nanning",
+            "海口": "haikou",
+            "haikou": "haikou",
+            "三亚": "sanya",
+            "sanya": "sanya",
+            "贵阳": "guiyang",
+            "guiyang": "guiyang",
+            "昆明": "kunming",
+            "kunming": "kunming",
+            "拉萨": "lhasa",
+            "lhasa": "lhasa",
+            "兰州": "lanzhou",
+            "lanzhou": "lanzhou",
+            "西宁": "xining",
+            "xining": "xining",
+            "银川": "yinchuan",
+            "yinchuan": "yinchuan",
+            "乌鲁木齐": "urumqi",
+            "urumqi": "urumqi"
         }
         
         for keyword, normalized_name in destination_map.items():
@@ -1127,22 +1219,30 @@ class MessageHandlers:
             destination = self._extract_destination_from_message(message_text)
             
             if destination:
-                # Determine platform preference
-                platform = "both"  # Default to both platforms
-                if "小红书" in message_text or "xiaohongshu" in message_text.lower():
-                    platform = "xiaohongshu"
-                elif "instagram" in message_text.lower():
-                    platform = "instagram"
+                # Get Instagram buttons for hotels
+                instagram_buttons = await self.llm_service._get_instagram_buttons_for_hotels(response, destination)
                 
-                # Get influencer hotel recommendations
-                influencer_info = await self.llm_service.get_influencer_hotel_recommendations(destination, platform)
-                
-                if influencer_info:
+                if instagram_buttons:
                     # Send text response first
                     await update.message.reply_text(response, parse_mode="Markdown")
                     
-                    # Send influencer hotel information
-                    await update.message.reply_text(influencer_info, parse_mode="Markdown")
+                    # Create Instagram buttons
+                    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                    keyboard = []
+                    for button_data in instagram_buttons:
+                        keyboard.append([InlineKeyboardButton(
+                            button_data["text"], 
+                            url=button_data["url"]
+                        )])
+                    
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    # Send Instagram buttons
+                    await update.message.reply_text(
+                        "📱 *查看酒店Instagram内容:*\n\n💡 *点击按钮查看Instagram上的真实用户分享和照片*",
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
                 else:
                     # Fallback to regular response
                     await update.message.reply_text(response, parse_mode="Markdown")
