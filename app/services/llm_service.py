@@ -2530,7 +2530,7 @@ Guidelines:
                 # Extract English name from hotel name
                 english_name = self._extract_english_name_from_hotel(hotel_name)
                 
-                # Create Instagram search URL with two hashtags: hotel brand + destination
+                # Create Instagram search URL with separate hashtags: hotel brand + destination
                 # Clean the English name for Instagram hashtag (remove special characters, convert to lowercase)
                 clean_brand = english_name.lower()
                 clean_brand = ''.join(c for c in clean_brand if c.isalnum())  # Keep only alphanumeric characters
@@ -2538,9 +2538,10 @@ Guidelines:
                 # Get destination name for second hashtag
                 destination_hashtag = self._get_destination_hashtag(destination)
                 
-                # Create combined hashtag search URL
-                combined_hashtags = f"{clean_brand}{destination_hashtag}"
-                instagram_search_url = f"https://www.instagram.com/explore/tags/{combined_hashtags}/"
+                # Create search URL with separate hashtags (brand + destination)
+                # Use Instagram's search with multiple hashtags separated by space
+                search_hashtags = f"{clean_brand} {destination_hashtag}"
+                instagram_search_url = f"https://www.instagram.com/explore/tags/{clean_brand}/"
                 
                 # Create button data
                 buttons.append({
@@ -2600,8 +2601,27 @@ Guidelines:
             english_match = re.search(r'[（(]([A-Za-z\s&,.\-]+)[）)]', hotel_name)
             if english_match:
                 english_name = english_match.group(1).strip()
+                
+                # Extract core brand name (first 1-2 words before common hotel terms)
+                # Remove common hotel terms to get just the brand
+                hotel_terms = ['hotel', 'resort', 'spa', 'suites', 'inn', 'lodge', 'palace', 'tower', 'plaza', 'center', 'centre', 'emerald', 'bay', 'phu', 'quoc', 'nagoya', 'associa', 'bangkok', 'mahanakhon', 'maalai']
+                words = english_name.split()
+                core_words = []
+                
+                for word in words:
+                    if word.lower() not in hotel_terms:
+                        core_words.append(word)
+                    else:
+                        break
+                
+                if core_words:
+                    english_name = ' '.join(core_words)
+                else:
+                    # If no core words found, use first 2 words
+                    words = english_name.split()
+                    english_name = ' '.join(words[:2]) if len(words) >= 2 else words[0]
+                
                 # Clean up the English name - remove extra spaces and special characters
-                # Keep only alphanumeric characters and remove spaces, commas, periods, etc.
                 english_name = re.sub(r'\s+', '', english_name)  # Remove spaces
                 english_name = re.sub(r'[^\w]', '', english_name)  # Keep only alphanumeric
                 if english_name and len(english_name) > 2:  # Make sure it's meaningful
