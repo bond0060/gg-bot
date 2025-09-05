@@ -56,12 +56,20 @@ class LLMService:
             generated_response = response.choices[0].message.content.strip()
             logger.info("Successfully generated LLM response")
             
-            # Check if this is a hotel query and add TripAdvisor ratings
+            # Check if this is a hotel query and handle preference collection
             if self._is_hotel_query(message):
                 logger.info(f"Detected hotel query: {message}")
                 destination = self._extract_destination_from_message(message)
                 logger.info(f"Extracted destination: {destination}")
                 if destination:
+                    # Check if we need to collect preferences first
+                    if self._should_collect_preferences(destination, message):
+                        city_type = self._classify_city_type(destination)
+                        preference_prompt = self._build_preference_collection_prompt(destination, city_type)
+                        if preference_prompt:
+                            logger.info(f"Need to collect preferences for {city_type} class city: {destination}")
+                            return preference_prompt
+                    
                     # Add TripAdvisor ratings
                     tripadvisor_info = await self._get_tripadvisor_info_for_destination(destination)
                     if tripadvisor_info:
@@ -1037,6 +1045,139 @@ IMPORTANT: Always end your response with a booking link:
             return ""
         req_text = "；".join(reqs)
         return f"{name}，按你要求（{req_text}），我把最稳的全服务航司直飞组合挑好了，并给出当下可参考价区间："
+
+    def _classify_city_type(self, destination: str) -> str:
+        """Classify destination into A, B, or C category based on city size and hotel availability"""
+        destination_lower = destination.lower()
+        
+        # A类城市 (大城市) - Major metropolises with extensive hotel options
+        a_cities = {
+            "上海", "shanghai", "东京", "tokyo", "曼谷", "bangkok", "新加坡", "singapore",
+            "香港", "hong kong", "首尔", "seoul", "台北", "taipei", "北京", "beijing",
+            "深圳", "shenzhen", "广州", "guangzhou", "纽约", "new york", "伦敦", "london",
+            "巴黎", "paris", "洛杉矶", "los angeles", "悉尼", "sydney", "迪拜", "dubai",
+            "阿布扎比", "abu dhabi", "伊斯坦布尔", "istanbul", "孟买", "mumbai",
+            "德里", "delhi", "雅加达", "jakarta", "马尼拉", "manila", "胡志明市", "ho chi minh"
+        }
+        
+        # B类城市 (一般城市) - Medium-sized cities with moderate hotel options
+        b_cities = {
+            "清迈", "chiang mai", "武汉", "wuhan", "名古屋", "nagoya", "大阪", "osaka",
+            "京都", "kyoto", "福冈", "fukuoka", "札幌", "sapporo", "成都", "chengdu",
+            "杭州", "hangzhou", "南京", "nanjing", "西安", "xian", "青岛", "qingdao",
+            "大连", "dalian", "厦门", "xiamen", "苏州", "suzhou", "无锡", "wuxi",
+            "宁波", "ningbo", "温州", "wenzhou", "佛山", "foshan", "东莞", "dongguan",
+            "中山", "zhongshan", "珠海", "zhuhai", "惠州", "huizhou", "江门", "jiangmen",
+            "肇庆", "zhaoqing", "湛江", "zhanjiang", "茂名", "maoming", "阳江", "yangjiang",
+            "清远", "qingyuan", "韶关", "shaoguan", "河源", "heyuan", "梅州", "meizhou",
+            "汕尾", "shanwei", "汕头", "shantou", "潮州", "chaozhou", "揭阳", "jieyang",
+            "云浮", "yunfu", "茂名", "maoming", "阳江", "yangjiang", "清远", "qingyuan",
+            "韶关", "shaoguan", "河源", "heyuan", "梅州", "meizhou", "汕尾", "shanwei",
+            "汕头", "shantou", "潮州", "chaozhou", "揭阳", "jieyang", "云浮", "yunfu",
+            "巴厘岛", "bali", "普吉岛", "phuket", "苏梅岛", "koh samui", "甲米", "krabi",
+            "华欣", "hua hin", "芭提雅", "pattaya", "清莱", "chiang rai", "素可泰", "sukhothai",
+            "大城", "ayutthaya", "华富里", "lopburi", "北碧", "kanchanaburi", "叻丕", "ratchaburi",
+            "佛统", "nakhon pathom", "沙没颂堪", "samut songkhram", "沙没沙空", "samut sakhon",
+            "沙没巴干", "samut prakan", "暖武里", "nonthaburi", "巴吞他尼", "pathum thani",
+            "大城", "ayutthaya", "华富里", "lopburi", "北碧", "kanchanaburi", "叻丕", "ratchaburi",
+            "佛统", "nakhon pathom", "沙没颂堪", "samut songkhram", "沙没沙空", "samut sakhon",
+            "沙没巴干", "samut prakan", "暖武里", "nonthaburi", "巴吞他尼", "pathum thani",
+            "横滨", "yokohama", "神户", "kobe", "广岛", "hiroshima", "仙台", "sendai",
+            "福岛", "fukushima", "新潟", "niigata", "富山", "toyama", "金泽", "kanazawa",
+            "长野", "nagano", "山梨", "yamanashi", "静冈", "shizuoka", "爱知", "aichi",
+            "三重", "mie", "滋贺", "shiga", "京都", "kyoto", "大阪", "osaka", "兵库", "hyogo",
+            "奈良", "nara", "和歌山", "wakayama", "鸟取", "tottori", "岛根", "shimane",
+            "冈山", "okayama", "广岛", "hiroshima", "山口", "yamaguchi", "德岛", "tokushima",
+            "香川", "kagawa", "爱媛", "ehime", "高知", "kochi", "福冈", "fukuoka", "佐贺", "saga",
+            "长崎", "nagasaki", "熊本", "kumamoto", "大分", "oita", "宫崎", "miyazaki",
+            "鹿儿岛", "kagoshima", "冲绳", "okinawa", "富国岛", "phu quoc", "岘港", "da nang",
+            "会安", "hoi an", "顺化", "hue", "芽庄", "nha trang", "大叻", "dalat", "美奈", "mui ne",
+            "头顿", "vung tau", "芹苴", "can tho", "金边", "phnom penh", "暹粒", "siem reap",
+            "西哈努克", "sihanoukville", "马德望", "battambang", "磅湛", "kampong cham",
+            "磅同", "kampong thom", "桔井", "kratie", "上丁", "stung treng", "拉达那基里", "rattanakiri",
+            "蒙多基里", "mondulkiri", "柏威夏", "preah vihear", "奥多棉吉", "oddar meanchey",
+            "班迭棉吉", "banteay meanchey", "菩萨", "pursat", "贡布", "kampot", "茶胶", "takeo",
+            "柴桢", "svay rieng", "波罗勉", "prey veng", "干丹", "kandal", "磅士卑", "kampong speu",
+            "磅清扬", "kampong chhnang", "磅同", "kampong thom", "桔井", "kratie", "上丁", "stung treng",
+            "拉达那基里", "rattanakiri", "蒙多基里", "mondulkiri", "柏威夏", "preah vihear",
+            "奥多棉吉", "oddar meanchey", "班迭棉吉", "banteay meanchey", "菩萨", "pursat",
+            "贡布", "kampot", "茶胶", "takeo", "柴桢", "svay rieng", "波罗勉", "prey veng",
+            "干丹", "kandal", "磅士卑", "kampong speu", "磅清扬", "kampong chhnang"
+        }
+        
+        # Check for exact matches first
+        if destination_lower in a_cities:
+            return "A"
+        elif destination_lower in b_cities:
+            return "B"
+        else:
+            # For unmatched destinations, use heuristics
+            if any(keyword in destination_lower for keyword in ["首都", "capital", "省会", "provincial"]):
+                return "B"
+            elif any(keyword in destination_lower for keyword in ["岛", "island", "度假村", "resort"]):
+                return "B"
+            else:
+                return "C"  # Default to C for smaller/unknown destinations
+
+    def _should_collect_preferences(self, destination: str, user_message: str) -> bool:
+        """Determine if we need to collect user preferences before recommending hotels"""
+        city_type = self._classify_city_type(destination)
+        
+        # For A and B class cities, check if user has already provided preferences
+        if city_type in ["A", "B"]:
+            # Check if user message contains preference information
+            preference_keywords = [
+                "预算", "budget", "价格", "price", "星级", "star", "星级", "rating",
+                "位置", "location", "商圈", "district", "品牌", "brand", "万豪", "marriott",
+                "希尔顿", "hilton", "凯悦", "hyatt", "洲际", "intercontinental",
+                "奢华", "luxury", "豪华", "deluxe", "经济", "economy", "商务", "business",
+                "附近", "nearby", "便利", "convenient", "交通", "transport", "市中心", "downtown",
+                "机场", "airport", "景点", "attraction", "购物", "shopping", "商业", "commercial"
+            ]
+            
+            # If user message contains preference keywords, don't ask for more info
+            if any(keyword in user_message.lower() for keyword in preference_keywords):
+                return False
+            
+            # If user message is very specific (contains hotel names, specific requests)
+            specific_keywords = ["推荐", "recommend", "酒店", "hotel", "住宿", "accommodation"]
+            if any(keyword in user_message.lower() for keyword in specific_keywords):
+                return True
+            
+            return True
+        
+        # For C class cities, don't collect preferences
+        return False
+
+    def _build_preference_collection_prompt(self, destination: str, city_type: str) -> str:
+        """Build prompt to collect user preferences based on city type"""
+        if city_type == "A":
+            return f"""{destination}的酒店选择非常多，在给到您具体的推荐酒店之前，请告诉我您对酒店的单晚预算和星级要求，以及对于酒店位置和品牌是否有特别的偏好呢？
+
+请提供以下信息：
+• 单晚预算（如：¥500-1000、¥1000-2000等）
+• 酒店星级（如：4星、5星等）
+• 位置/商圈偏好（如：市中心、机场附近、特定商圈等）
+• 酒店品牌偏好（如：万豪、希尔顿、凯悦等，可选）
+
+您也可以选择浏览以下推荐清单：
+• 黄金地段酒店清单
+• 奢华酒店清单  
+• 豪华酒店清单
+• 美景酒店清单
+• 高性价比酒店清单"""
+        
+        elif city_type == "B":
+            return f"""{destination}有比较多的酒店选择，在给到您具体的推荐酒店之前，请告诉我您对酒店的单晚预算和星级要求，以及对于酒店位置是否有特别的偏好呢？
+
+请提供以下信息：
+• 单晚预算（如：¥300-800、¥800-1500等）
+• 酒店星级（如：3星、4星、5星等）
+• 位置/商圈偏好（如：市中心、景点附近、交通便利等）
+
+（B类城市可以不用主要问品牌要求，因为可选品牌可能不多）"""
+        
+        return ""
 
     def _build_system_prompt(self, context: Dict[str, Any], message_type: str) -> str:
         """Build system prompt for travel planning context"""
