@@ -1055,7 +1055,7 @@ Key guidelines:
 - For hotel queries: Use the EXACT format below for each hotel recommendation:
   - **Hotel Name (local + English if available)** (CRITICAL: Always wrap hotel names in **bold** markdown)
   - TripAdvisor评分：[rating]/5
-  - 价格范围：[price range]
+  - 价格范围：[price range in appropriate currency - use ¥ for Chinese users, $ for English users, € for European destinations, etc.]
   - 优势：[key highlights & why it's recommended]
 - For activities: Suggest specific attractions, opening hours, and ticket prices
 - Always provide multiple options when possible
@@ -2530,11 +2530,17 @@ Guidelines:
                 # Extract English name from hotel name
                 english_name = self._extract_english_name_from_hotel(hotel_name)
                 
-                # Create Instagram search URL for the hotel using English name
+                # Create Instagram search URL with two hashtags: hotel brand + destination
                 # Clean the English name for Instagram hashtag (remove special characters, convert to lowercase)
-                clean_name = english_name.lower()
-                clean_name = ''.join(c for c in clean_name if c.isalnum())  # Keep only alphanumeric characters
-                instagram_search_url = f"https://www.instagram.com/explore/tags/{clean_name}/"
+                clean_brand = english_name.lower()
+                clean_brand = ''.join(c for c in clean_brand if c.isalnum())  # Keep only alphanumeric characters
+                
+                # Get destination name for second hashtag
+                destination_hashtag = self._get_destination_hashtag(destination)
+                
+                # Create combined hashtag search URL
+                combined_hashtags = f"{clean_brand}{destination_hashtag}"
+                instagram_search_url = f"https://www.instagram.com/explore/tags/{combined_hashtags}/"
                 
                 # Create button data
                 buttons.append({
@@ -2548,6 +2554,39 @@ Guidelines:
         except Exception as e:
             logger.error(f"Error getting Instagram buttons for hotels: {e}")
             return None
+
+    def _get_destination_hashtag(self, destination: str) -> str:
+        """Get destination hashtag for Instagram search"""
+        try:
+            # Map destinations to their Instagram-friendly hashtags
+            destination_mapping = {
+                "nagoya": "nagoya",
+                "tokyo": "tokyo", 
+                "osaka": "osaka",
+                "kyoto": "kyoto",
+                "shanghai": "shanghai",
+                "beijing": "beijing",
+                "hong_kong": "hongkong",
+                "taipei": "taipei",
+                "seoul": "seoul",
+                "singapore": "singapore",
+                "kuala_lumpur": "kualalumpur",
+                "bangkok": "bangkok",
+                "paris": "paris",
+                "london": "london",
+                "new_york": "newyork",
+                "los_angeles": "losangeles",
+                "sydney": "sydney",
+                "melbourne": "melbourne"
+            }
+            
+            # Get the hashtag, default to destination if not found
+            hashtag = destination_mapping.get(destination.lower(), destination.lower())
+            return hashtag
+            
+        except Exception as e:
+            logger.error(f"Error getting destination hashtag for {destination}: {e}")
+            return destination.lower()
 
     def _extract_english_name_from_hotel(self, hotel_name: str) -> str:
         """Extract English name from hotel name for Instagram search"""
