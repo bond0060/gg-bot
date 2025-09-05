@@ -78,7 +78,7 @@ Your task:
 - Format the answer clearly and concisely, with **structured text** suitable for display in a chat or app.
 - For each hotel, ALWAYS follow this exact format:
 
-- **Hotel Name (local + English if available)** (CRITICAL: Always wrap hotel names in **bold** markdown)
+- **Hotel Name (local + English if available)** (CRITICAL: Always wrap hotel names in **bold** markdown - MANDATORY FORMAT)
 - 评分：[rating]/5 （TripAdvisor/Booking/Agoda, if available）
 - 价格范围：[per night price range, e.g. ¥20,000–¥35,000]
 - 房型推荐：[room type suggestions relevant to the group]
@@ -90,6 +90,7 @@ Rules:
 - If information is uncertain, state it clearly instead of hallucinating.
 - Use natural, engaging, yet concise language.
 - If recommending older hotels, clearly indicate their opening year or status.
+- MANDATORY: Every hotel name MUST be wrapped in **bold** markdown format - this is non-negotiable.
 
 推荐理由写作指导：
 - 位置便利性：提及距离地标/商圈/景点的步行距离，地铁/公交便利程度
