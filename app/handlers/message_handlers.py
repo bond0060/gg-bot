@@ -1202,7 +1202,10 @@ class MessageHandlers:
             "urumqi": "urumqi",
             "富国岛": "phu_quoc",
             "phu quoc": "phu_quoc",
-            "phuquoc": "phu_quoc"
+            "phuquoc": "phu_quoc",
+            "巴厘岛": "bali",
+            "bali": "bali",
+            "巴厘": "bali"
         }
         
         for keyword, normalized_name in destination_map.items():

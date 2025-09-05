@@ -2580,7 +2580,8 @@ Guidelines:
                 "los_angeles": "losangeles",
                 "sydney": "sydney",
                 "melbourne": "melbourne",
-                "phu_quoc": "phuquoc"
+                "phu_quoc": "phuquoc",
+                "bali": "bali"
             }
             
             # Get the hashtag, default to destination if not found
