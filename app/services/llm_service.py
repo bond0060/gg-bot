@@ -2756,9 +2756,8 @@ Guidelines:
                         # Remove number prefix (e.g., "1. " -> "")
                         hotel_name = re.sub(r'^\d+\.\s*', '', line).strip()
                     
-                    # Clean up the name (remove extra info in parentheses, etc.)
-                    hotel_name = re.sub(r'\s*\([^)]*\)$', '', hotel_name)  # Remove trailing parentheses
-                    hotel_name = re.sub(r'\s*（[^）]*）$', '', hotel_name)  # Remove trailing Chinese parentheses
+                    # Keep the full hotel name including parentheses for button generation
+                    # Don't remove parentheses as they contain important English names
                     
                     # Only add if it looks like a hotel name (not descriptive text)
                     if (hotel_name and len(hotel_name) > 3 and 
