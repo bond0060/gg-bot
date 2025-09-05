@@ -1225,9 +1225,6 @@ class MessageHandlers:
                 instagram_buttons = await self.llm_service._get_instagram_buttons_for_hotels(response, destination)
                 
                 if instagram_buttons:
-                    # Send text response first
-                    await update.message.reply_text(response, parse_mode="Markdown")
-                    
                     # Create Instagram buttons
                     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
                     keyboard = []
@@ -1239,9 +1236,9 @@ class MessageHandlers:
                     
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
-                    # Send Instagram buttons
+                    # Send text response with Instagram buttons in one message
                     await update.message.reply_text(
-                        "📱 *查看酒店Instagram内容:*\n\n💡 *点击按钮查看Instagram上的真实用户分享和照片*",
+                        response,
                         reply_markup=reply_markup,
                         parse_mode="Markdown"
                     )
