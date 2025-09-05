@@ -1199,7 +1199,10 @@ class MessageHandlers:
             "银川": "yinchuan",
             "yinchuan": "yinchuan",
             "乌鲁木齐": "urumqi",
-            "urumqi": "urumqi"
+            "urumqi": "urumqi",
+            "富国岛": "phu_quoc",
+            "phu quoc": "phu_quoc",
+            "phuquoc": "phu_quoc"
         }
         
         for keyword, normalized_name in destination_map.items():

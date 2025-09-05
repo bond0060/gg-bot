@@ -2577,7 +2577,8 @@ Guidelines:
                 "new_york": "newyork",
                 "los_angeles": "losangeles",
                 "sydney": "sydney",
-                "melbourne": "melbourne"
+                "melbourne": "melbourne",
+                "phu_quoc": "phuquoc"
             }
             
             # Get the hashtag, default to destination if not found
