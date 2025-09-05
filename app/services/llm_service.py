@@ -1053,7 +1053,7 @@ Key guidelines:
 - Consider budget, preferences, and group dynamics
 - For flight queries: Provide specific flight numbers, times, airlines, and price ranges
 - For hotel queries: Use the EXACT format below for each hotel recommendation:
-  - Hotel Name (local + English if available)
+  - **Hotel Name (local + English if available)** (make hotel names bold)
   - TripAdvisor评分：[rating]/5
   - 价格范围：[price range]
   - 优势：[key highlights & why it's recommended]
