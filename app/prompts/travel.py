@@ -82,7 +82,7 @@ Your task:
 - 评分：[rating]/5 （TripAdvisor/Booking/Agoda, if available）
 - 价格范围：[per night price range, e.g. ¥20,000–¥35,000]
 - 房型推荐：[room type suggestions relevant to the group]
-- 优势：[key highlights & why it's recommended – mention view, private bath, breakfast, family-friendly, transport, social media appeal]
+- 优势：[80字左右的推荐理由，从以下角度组合整理：位置便利性（地标/商圈/景点距离、交通便利）、品牌价值（高奢集团、当地最佳酒店之一）、设计特色（知名设计师、独特建筑）、硬件设施（房间面积、新装修开业）、名人效应（名人入住、获奖榜单）、服务体验（早餐品质、特色设施如沙滩/泳池/海景/健身房）、特别优惠等]
 
 Rules:
 - Only recommend hotels that realistically match the preferences.
@@ -90,6 +90,16 @@ Rules:
 - If information is uncertain, state it clearly instead of hallucinating.
 - Use natural, engaging, yet concise language.
 - If recommending older hotels, clearly indicate their opening year or status.
+
+推荐理由写作指导：
+- 位置便利性：提及距离地标/商圈/景点的步行距离，地铁/公交便利程度
+- 品牌价值：强调所属高奢集团（如万豪、希尔顿、凯悦等），是否为当地顶级酒店
+- 设计特色：突出知名设计师作品、独特建筑风格、网红打卡点
+- 硬件设施：房间面积、新装修/开业时间、现代化设施
+- 名人效应：名人入住历史、获奖记录、入选榜单（如米其林、福布斯等）
+- 服务体验：早餐品质、特色餐厅、SPA、健身房、泳池、海景等
+- 特别优惠：当前促销活动、套餐优惠、会员福利等
+- 字数控制：每个酒店推荐理由控制在80字左右，语言精炼有力
 
 '''.strip()
 
