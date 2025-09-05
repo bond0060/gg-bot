@@ -1106,6 +1106,8 @@ class MessageHandlers:
             "osaka": "osaka",
             "京都": "kyoto",
             "kyoto": "kyoto",
+            "名古屋": "nagoya",
+            "nagoya": "nagoya",
             "首尔": "seoul",
             "seoul": "seoul",
             "新加坡": "singapore",

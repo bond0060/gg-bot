@@ -72,7 +72,7 @@ Your task:
 - Format the answer clearly and concisely, with **structured text** suitable for display in a chat or app.
 - For each hotel, ALWAYS follow this exact format:
 
-- **Hotel Name (local + English if available)** (make hotel names bold)
+- **Hotel Name (local + English if available)** (CRITICAL: Always wrap hotel names in **bold** markdown)
 - 评分：[rating]/5 （TripAdvisor/Booking/Agoda, if available）
 - 价格范围：[per night price range, e.g. ¥20,000–¥35,000]
 - 房型推荐：[room type suggestions relevant to the group]
