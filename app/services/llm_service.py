@@ -2535,6 +2535,10 @@ Guidelines:
                 clean_brand = english_name.lower()
                 clean_brand = ''.join(c for c in clean_brand if c.isalnum())  # Keep only alphanumeric characters
                 
+                # If brand name is too short/simple, add "hotel" to make it more specific
+                if len(clean_brand) <= 6 and 'hotel' not in clean_brand and 'resort' not in clean_brand:
+                    clean_brand = f"{clean_brand}hotel"
+                
                 # Get destination name for second hashtag
                 destination_hashtag = self._get_destination_hashtag(destination)
                 
