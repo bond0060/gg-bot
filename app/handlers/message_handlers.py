@@ -700,7 +700,17 @@ class MessageHandlers:
                 # No follow-up questions, check if we should add custom buttons
                 if response and response.strip():
                     # Check if this is a hotel query FIRST - use influencer hotel response for Instagram buttons
-                    if any(keyword in message_text.lower() for keyword in ["酒店", "hotel", "住宿", "宾馆", "旅馆", "resort", "boutique", "accommodation", "lodging", "inn", "suite", "lodge"]):
+                    hotel_keywords = ["酒店", "hotel", "住宿", "宾馆", "旅馆", "resort", "boutique", "accommodation", "lodging", "inn", "suite", "lodge"]
+                    # Also check for "换X家" patterns which indicate hotel recommendations
+                    hotel_recommendation_patterns = ["换", "家", "推荐", "再", "其他", "别的", "重新"]
+                    
+                    is_hotel_query = (
+                        any(keyword in message_text.lower() for keyword in hotel_keywords) or
+                        (any(pattern in message_text.lower() for pattern in hotel_recommendation_patterns) and 
+                         any(word in response.lower() for word in ["酒店", "hotel", "住宿", "宾馆", "旅馆", "resort"]))
+                    )
+                    
+                    if is_hotel_query:
                         await self._send_influencer_hotel_response(update, response, message_text, chat_id)
                     
                     # Check if this is a general travel query that could benefit from custom buttons
