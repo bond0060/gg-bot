@@ -2599,7 +2599,73 @@ Guidelines:
                 if generic_name and len(generic_name) > 2:
                     return generic_name
             
-            # Last resort: use a generic hotel name
+            # Last resort: try to extract meaningful keywords from Chinese hotel name
+            # Map common Chinese hotel brand names to English equivalents
+            brand_mapping = {
+                "万豪": "Marriott",
+                "希尔顿": "Hilton", 
+                "凯悦": "Hyatt",
+                "大仓": "Okura",
+                "东急": "Tokyu",
+                "丽思卡尔顿": "RitzCarlton",
+                "四季": "FourSeasons",
+                "文华东方": "MandarinOriental",
+                "香格里拉": "ShangriLa",
+                "洲际": "InterContinental",
+                "威斯汀": "Westin",
+                "喜来登": "Sheraton",
+                "皇冠假日": "CrownPlaza",
+                "假日": "HolidayInn",
+                "索菲特": "Sofitel",
+                "雅高": "Accor",
+                "瑰丽": "Rosewood",
+                "柏悦": "ParkHyatt",
+                "瑞吉": "StRegis",
+                "艾迪逊": "EDITION",
+                "安达仕": "Andaz",
+                "君悦": "GrandHyatt",
+                "凯宾斯基": "Kempinski",
+                "朗廷": "Langham",
+                "半岛": "Peninsula",
+                "华尔道夫": "Waldorf",
+                "康莱德": "Conrad",
+                "JW万豪": "JWMarriott",
+                "威斯汀": "Westin",
+                "喜来登": "Sheraton"
+            }
+            
+            # Try to find brand names in the hotel name
+            for chinese_brand, english_brand in brand_mapping.items():
+                if chinese_brand in hotel_name:
+                    return english_brand
+            
+            # If no brand found, try to extract city name and use it
+            city_mapping = {
+                "名古屋": "Nagoya",
+                "东京": "Tokyo", 
+                "大阪": "Osaka",
+                "京都": "Kyoto",
+                "上海": "Shanghai",
+                "北京": "Beijing",
+                "香港": "HongKong",
+                "台北": "Taipei",
+                "首尔": "Seoul",
+                "新加坡": "Singapore",
+                "吉隆坡": "KualaLumpur",
+                "曼谷": "Bangkok",
+                "巴黎": "Paris",
+                "伦敦": "London",
+                "纽约": "NewYork",
+                "洛杉矶": "LosAngeles",
+                "悉尼": "Sydney",
+                "墨尔本": "Melbourne"
+            }
+            
+            for chinese_city, english_city in city_mapping.items():
+                if chinese_city in hotel_name:
+                    return f"{english_city}Hotel"
+            
+            # Final fallback
             return "Hotel"
             
         except Exception as e:
