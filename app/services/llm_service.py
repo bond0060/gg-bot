@@ -15,6 +15,8 @@ from app.services.plan_storage import plan_storage
 from app.services.follow_up_questions import follow_up_service
 from app.services.flight_search import flight_search_service
 from app.services.firecrawl_service import firecrawl_service
+from app.services.city_classifier import city_classifier
+from app.services.hotel_agent import hotel_agent
 from search.google_search import search_web
 
 logger = logging.getLogger(__name__)
@@ -27,6 +29,9 @@ class LLMService:
         self.vision_model = "gpt-4o-mini"  # Vision-capable model
         self.max_tokens = settings.openai_max_tokens
         self.temperature = settings.openai_temperature
+        
+        # Initialize hotel agent with dependencies
+        hotel_agent.set_dependencies(city_classifier, self)
 
     async def generate_travel_response(
         self,
@@ -44,6 +49,9 @@ class LLMService:
             # Build conversation messages with history
             messages = self._build_conversation_messages(message, context, message_type, system_prompt)
             
+            # Hotel queries are now handled by the UI interface in message handlers
+            # No need to check for hotel queries here anymore
+            
             logger.info(f"Generating LLM response for {message_type} message with {len(messages)-1} history messages")
             
             response = await self.client.chat.completions.create(
@@ -55,30 +63,6 @@ class LLMService:
             
             generated_response = response.choices[0].message.content.strip()
             logger.info("Successfully generated LLM response")
-            
-            # Check if this is a hotel query and handle preference collection
-            if self._is_hotel_query(message):
-                logger.info(f"Detected hotel query: {message}")
-                destination = self._extract_destination_from_message(message)
-                logger.info(f"Extracted destination: {destination}")
-                if destination:
-                    # Check if we need to collect preferences first
-                    if self._should_collect_preferences(destination, message):
-                        city_type = self._classify_city_type(destination)
-                        preference_prompt = self._build_preference_collection_prompt(destination, city_type)
-                        if preference_prompt:
-                            logger.info(f"Need to collect preferences for {city_type} class city: {destination}")
-                            return preference_prompt
-                    
-                    # Add TripAdvisor ratings
-                    tripadvisor_info = await self._get_tripadvisor_info_for_destination(destination)
-                    if tripadvisor_info:
-                        generated_response += f"\n\n{tripadvisor_info}"
-                    
-                    # Note: Instagram links are now handled as buttons in the message handler
-                    logger.info("Hotel query detected - Instagram buttons will be added by message handler")
-                else:
-                    logger.info("No destination extracted from hotel query")
             
             # Generate smart LLM-based follow-up questions
             follow_up_questions = await follow_up_service.generate_smart_follow_up_questions(
@@ -202,7 +186,10 @@ IMPORTANT: Always end your response with a booking link:
             # Build conversation messages with history
             messages = self._build_conversation_messages(message, context, message_type, system_prompt)
             
-            logger.info(f"Generating LLM response without follow-up for {message_type} message")
+            # Hotel queries are now handled by the UI interface in message handlers
+            # No need to check for hotel queries here anymore
+            
+            logger.info(f"Generating LLM response without follow-up for {message_type} message: {message[:50]}...")
             
             response = await self.client.chat.completions.create(
                 model=self.model,
@@ -1047,137 +1034,151 @@ IMPORTANT: Always end your response with a booking link:
         return f"{name}，按你要求（{req_text}），我把最稳的全服务航司直飞组合挑好了，并给出当下可参考价区间："
 
     def _classify_city_type(self, destination: str) -> str:
-        """Classify destination into A, B, or C category based on city size and hotel availability"""
-        destination_lower = destination.lower()
-        
-        # A类城市 (大城市) - Major metropolises with extensive hotel options
-        a_cities = {
-            "上海", "shanghai", "东京", "tokyo", "曼谷", "bangkok", "新加坡", "singapore",
-            "香港", "hong kong", "首尔", "seoul", "台北", "taipei", "北京", "beijing",
-            "深圳", "shenzhen", "广州", "guangzhou", "纽约", "new york", "伦敦", "london",
-            "巴黎", "paris", "洛杉矶", "los angeles", "悉尼", "sydney", "迪拜", "dubai",
-            "阿布扎比", "abu dhabi", "伊斯坦布尔", "istanbul", "孟买", "mumbai",
-            "德里", "delhi", "雅加达", "jakarta", "马尼拉", "manila", "胡志明市", "ho chi minh"
-        }
-        
-        # B类城市 (一般城市) - Medium-sized cities with moderate hotel options
-        b_cities = {
-            "清迈", "chiang mai", "武汉", "wuhan", "名古屋", "nagoya", "大阪", "osaka",
-            "京都", "kyoto", "福冈", "fukuoka", "札幌", "sapporo", "成都", "chengdu",
-            "杭州", "hangzhou", "南京", "nanjing", "西安", "xian", "青岛", "qingdao",
-            "大连", "dalian", "厦门", "xiamen", "苏州", "suzhou", "无锡", "wuxi",
-            "宁波", "ningbo", "温州", "wenzhou", "佛山", "foshan", "东莞", "dongguan",
-            "中山", "zhongshan", "珠海", "zhuhai", "惠州", "huizhou", "江门", "jiangmen",
-            "肇庆", "zhaoqing", "湛江", "zhanjiang", "茂名", "maoming", "阳江", "yangjiang",
-            "清远", "qingyuan", "韶关", "shaoguan", "河源", "heyuan", "梅州", "meizhou",
-            "汕尾", "shanwei", "汕头", "shantou", "潮州", "chaozhou", "揭阳", "jieyang",
-            "云浮", "yunfu", "茂名", "maoming", "阳江", "yangjiang", "清远", "qingyuan",
-            "韶关", "shaoguan", "河源", "heyuan", "梅州", "meizhou", "汕尾", "shanwei",
-            "汕头", "shantou", "潮州", "chaozhou", "揭阳", "jieyang", "云浮", "yunfu",
-            "巴厘岛", "bali", "普吉岛", "phuket", "苏梅岛", "koh samui", "甲米", "krabi",
-            "华欣", "hua hin", "芭提雅", "pattaya", "清莱", "chiang rai", "素可泰", "sukhothai",
-            "大城", "ayutthaya", "华富里", "lopburi", "北碧", "kanchanaburi", "叻丕", "ratchaburi",
-            "佛统", "nakhon pathom", "沙没颂堪", "samut songkhram", "沙没沙空", "samut sakhon",
-            "沙没巴干", "samut prakan", "暖武里", "nonthaburi", "巴吞他尼", "pathum thani",
-            "大城", "ayutthaya", "华富里", "lopburi", "北碧", "kanchanaburi", "叻丕", "ratchaburi",
-            "佛统", "nakhon pathom", "沙没颂堪", "samut songkhram", "沙没沙空", "samut sakhon",
-            "沙没巴干", "samut prakan", "暖武里", "nonthaburi", "巴吞他尼", "pathum thani",
-            "横滨", "yokohama", "神户", "kobe", "广岛", "hiroshima", "仙台", "sendai",
-            "福岛", "fukushima", "新潟", "niigata", "富山", "toyama", "金泽", "kanazawa",
-            "长野", "nagano", "山梨", "yamanashi", "静冈", "shizuoka", "爱知", "aichi",
-            "三重", "mie", "滋贺", "shiga", "京都", "kyoto", "大阪", "osaka", "兵库", "hyogo",
-            "奈良", "nara", "和歌山", "wakayama", "鸟取", "tottori", "岛根", "shimane",
-            "冈山", "okayama", "广岛", "hiroshima", "山口", "yamaguchi", "德岛", "tokushima",
-            "香川", "kagawa", "爱媛", "ehime", "高知", "kochi", "福冈", "fukuoka", "佐贺", "saga",
-            "长崎", "nagasaki", "熊本", "kumamoto", "大分", "oita", "宫崎", "miyazaki",
-            "鹿儿岛", "kagoshima", "冲绳", "okinawa", "富国岛", "phu quoc", "岘港", "da nang",
-            "会安", "hoi an", "顺化", "hue", "芽庄", "nha trang", "大叻", "dalat", "美奈", "mui ne",
-            "头顿", "vung tau", "芹苴", "can tho", "金边", "phnom penh", "暹粒", "siem reap",
-            "西哈努克", "sihanoukville", "马德望", "battambang", "磅湛", "kampong cham",
-            "磅同", "kampong thom", "桔井", "kratie", "上丁", "stung treng", "拉达那基里", "rattanakiri",
-            "蒙多基里", "mondulkiri", "柏威夏", "preah vihear", "奥多棉吉", "oddar meanchey",
-            "班迭棉吉", "banteay meanchey", "菩萨", "pursat", "贡布", "kampot", "茶胶", "takeo",
-            "柴桢", "svay rieng", "波罗勉", "prey veng", "干丹", "kandal", "磅士卑", "kampong speu",
-            "磅清扬", "kampong chhnang", "磅同", "kampong thom", "桔井", "kratie", "上丁", "stung treng",
-            "拉达那基里", "rattanakiri", "蒙多基里", "mondulkiri", "柏威夏", "preah vihear",
-            "奥多棉吉", "oddar meanchey", "班迭棉吉", "banteay meanchey", "菩萨", "pursat",
-            "贡布", "kampot", "茶胶", "takeo", "柴桢", "svay rieng", "波罗勉", "prey veng",
-            "干丹", "kandal", "磅士卑", "kampong speu", "磅清扬", "kampong chhnang"
-        }
-        
-        # Check for exact matches first
-        if destination_lower in a_cities:
-            return "A"
-        elif destination_lower in b_cities:
-            return "B"
-        else:
-            # For unmatched destinations, use heuristics
-            if any(keyword in destination_lower for keyword in ["首都", "capital", "省会", "provincial"]):
-                return "B"
-            elif any(keyword in destination_lower for keyword in ["岛", "island", "度假村", "resort"]):
-                return "B"
-            else:
-                return "C"  # Default to C for smaller/unknown destinations
+        """Classify destination into A, B, or C category using city classifier service"""
+        tier, _ = city_classifier.classify_city(destination)
+        return tier
 
     def _should_collect_preferences(self, destination: str, user_message: str) -> bool:
         """Determine if we need to collect user preferences before recommending hotels"""
-        city_type = self._classify_city_type(destination)
-        
-        # For A and B class cities, check if user has already provided preferences
-        if city_type in ["A", "B"]:
-            # Check if user message contains preference information
-            preference_keywords = [
-                "预算", "budget", "价格", "price", "星级", "star", "星级", "rating",
-                "位置", "location", "商圈", "district", "品牌", "brand", "万豪", "marriott",
-                "希尔顿", "hilton", "凯悦", "hyatt", "洲际", "intercontinental",
-                "奢华", "luxury", "豪华", "deluxe", "经济", "economy", "商务", "business",
-                "附近", "nearby", "便利", "convenient", "交通", "transport", "市中心", "downtown",
-                "机场", "airport", "景点", "attraction", "购物", "shopping", "商业", "commercial"
-            ]
-            
-            # If user message contains preference keywords, don't ask for more info
-            if any(keyword in user_message.lower() for keyword in preference_keywords):
-                return False
-            
-            # If user message is very specific (contains hotel names, specific requests)
-            specific_keywords = ["推荐", "recommend", "酒店", "hotel", "住宿", "accommodation"]
-            if any(keyword in user_message.lower() for keyword in specific_keywords):
-                return True
-            
-            return True
-        
-        # For C class cities, don't collect preferences
-        return False
+        return city_classifier.should_collect_preferences(destination, user_message)
 
     def _build_preference_collection_prompt(self, destination: str, city_type: str) -> str:
         """Build prompt to collect user preferences based on city type"""
-        if city_type == "A":
-            return f"""{destination}的酒店选择非常多，在给到您具体的推荐酒店之前，请告诉我您对酒店的单晚预算和星级要求，以及对于酒店位置和品牌是否有特别的偏好呢？
+        return city_classifier.build_preference_prompt(destination)
 
-请提供以下信息：
-• 单晚预算（如：¥500-1000、¥1000-2000等）
-• 酒店星级（如：4星、5星等）
-• 位置/商圈偏好（如：市中心、机场附近、特定商圈等）
-• 酒店品牌偏好（如：万豪、希尔顿、凯悦等，可选）
+    async def handle_hotel_recommendation(self, message: str, context: Dict[str, Any]) -> str:
+        """Handle hotel recommendation with slot filling"""
+        try:
+            # Get or create hotel slots in context
+            chat_id = context.get("chat_id", "default")
+            if "hotel_slots" not in context:
+                context["hotel_slots"] = hotel_agent.slots.copy()
+            else:
+                # Restore slots from context
+                hotel_agent.slots = context["hotel_slots"].copy()
+                # Ensure all required fields exist
+                default_slots = hotel_agent._initialize_slots()
+                for key, default_value in default_slots.items():
+                    if key not in hotel_agent.slots:
+                        hotel_agent.slots[key] = default_value
+            
+            # Extract slots from user message
+            extracted_slots = hotel_agent.extract_slots_from_message(message)
+            hotel_agent.update_slots(extracted_slots)
+            
+            # Ensure city_type is set if we have a city
+            if hotel_agent.slots.get("city") and not hotel_agent.slots.get("city_type"):
+                city_type = self._classify_city_type(hotel_agent.slots["city"])
+                hotel_agent.slots["city_type"] = city_type
+            
+            # Save updated slots back to context
+            context["hotel_slots"] = hotel_agent.slots.copy()
+            
+            # Check if we have enough information to recommend
+            if hotel_agent.should_recommend_hotels():
+                # Generate hotel recommendations
+                return await self._generate_hotel_recommendations(context)
+            else:
+                # Ask for missing information
+                missing_slots = hotel_agent.get_missing_required_slots()
+                if missing_slots:
+                    question = hotel_agent.generate_question(missing_slots[0])
+                    return question
+                elif hotel_agent.get_narrowing_questions_needed():
+                    question = hotel_agent.generate_narrowing_question()
+                    return question
+                else:
+                    return "请提供更多信息以便为您推荐合适的酒店。"
+                    
+        except Exception as e:
+            logger.error(f"Error in hotel recommendation: {e}")
+            return "抱歉，处理您的酒店推荐请求时出现了问题。请稍后再试。"
+    
+    async def _generate_hotel_recommendations(self, context: Dict[str, Any]) -> str:
+        """Generate hotel recommendations based on filled slots"""
+        try:
+            logger.info("Starting hotel recommendations generation")
+            
+            # Build system prompt for hotel recommendations
+            system_prompt = self._build_hotel_system_prompt()
+            logger.info(f"System prompt length: {len(system_prompt)}")
+            
+            # Build user prompt with slot information
+            user_prompt = self._build_hotel_user_prompt()
+            logger.info(f"User prompt: {user_prompt}")
+            
+            # Call OpenAI for hotel recommendations
+            logger.info("Calling OpenAI API...")
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_tokens=self.max_tokens,
+                temperature=self.temperature
+            )
+            logger.info("OpenAI API call completed")
+            
+            hotel_recommendations = response.choices[0].message.content
+            
+            # Don't reset slots here - let the UI service handle it
+            # hotel_agent.reset_slots()
+            
+            return hotel_recommendations
+            
+        except Exception as e:
+            logger.error(f"Error generating hotel recommendations: {e}")
+            return "抱歉，生成酒店推荐时出现了问题。请稍后再试。"
+    
+    def _build_hotel_system_prompt(self) -> str:
+        """Build system prompt for hotel recommendations"""
+        return """
+You are "waypal – Hotel Planner". 
+Your duty is to recommend hotels based on user requirements.
 
-您也可以选择浏览以下推荐清单：
-• 黄金地段酒店清单
-• 奢华酒店清单  
-• 豪华酒店清单
-• 美景酒店清单
-• 高性价比酒店清单"""
+CRITICAL: Hotel Selection Priority
+1. **NEWLY OPENED HOTELS (2022-2025)**: Prioritize hotels that opened in the last 3 years, especially those with social media buzz
+2. **INSTAGRAM-WORTHY/TRENDY HOTELS**: Focus on hotels popular on social media (Xiaohongshu, Instagram, TikTok) for photo opportunities
+3. **DESIGN-FOCUSED HOTELS**: Prefer hotels with unique architecture, modern design, or distinctive features
+4. **FALLBACK**: If no recent openings available, clearly state "暂无近期开业的网红酒店，以下为知名度高的替代选项" and recommend well-known hotels
+
+Output format for each hotel (exact lines):
+- **Hotel Name (local + English if available)** (CRITICAL: Always wrap hotel names in **bold** markdown - MANDATORY FORMAT)
+- TripAdvisor Rating: [rating]/5 (if unknown: Not available)
+- Price Range: [local currency per night]
+- Highlights: [comma-separated reasons—location/transport/view/breakfast/family/amenities]
+
+Guardrails:
+- Do NOT invent ratings/prices/opening year. If unknown: "Not available".
+- Always use local currency and realistic per-night ranges.
+- MANDATORY: Every hotel name MUST be wrapped in **bold** markdown format - this is non-negotiable.
+"""
+    
+    def _build_hotel_user_prompt(self) -> str:
+        """Build user prompt with slot information"""
+        slots = hotel_agent.slots
+        logger.info(f"Building hotel user prompt with slots: {slots}")
         
-        elif city_type == "B":
-            return f"""{destination}有比较多的酒店选择，在给到您具体的推荐酒店之前，请告诉我您对酒店的单晚预算和星级要求，以及对于酒店位置是否有特别的偏好呢？
-
-请提供以下信息：
-• 单晚预算（如：¥300-800、¥800-1500等）
-• 酒店星级（如：3星、4星、5星等）
-• 位置/商圈偏好（如：市中心、景点附近、交通便利等）
-
-（B类城市可以不用主要问品牌要求，因为可选品牌可能不多）"""
+        summary = hotel_agent.build_recommendation_summary()
+        logger.info(f"Hotel recommendation summary: {summary}")
         
-        return ""
+        prompt = f"用户需求：{summary}\n\n"
+        prompt += "请根据以上需求推荐3-5家合适的酒店。\n\n"
+        
+        # Add specific requirements
+        if slots["preferred_area"]:
+            prompt += f"位置偏好：{slots['preferred_area']}\n"
+        if slots["preferred_brands"]:
+            prompt += f"品牌偏好：{', '.join(slots['preferred_brands'])}\n"
+        if slots["special_needs"]:
+            prompt += f"特殊需求：{', '.join(slots['special_needs'])}\n"
+        if slots["view"]:
+            prompt += f"景观需求：{slots['view']}\n"
+        if slots["style"]:
+            prompt += f"风格偏好：{slots['style']}\n"
+        
+        return prompt
 
     def _build_system_prompt(self, context: Dict[str, Any], message_type: str) -> str:
         """Build system prompt for travel planning context"""
@@ -1222,7 +1223,7 @@ For flight recommendations specifically:
 - Consider family-friendly options (no red-eye flights for families)
 - Suggest airport choices (HND vs NRT for Tokyo, etc.)
 - Include practical tips about booking timing
-- End with "关键信息（直说）" and "我的建议（带孩子优先级）"
+- Provide practical tips about booking timing
 
 """
         
@@ -2496,14 +2497,26 @@ Guidelines:
             logger.error(f"Error formatting influencer hotel info: {e}")
             return "获取网红酒店推荐时出现错误"
 
-    def _is_hotel_query(self, message: str) -> bool:
-        """Check if the message is asking about hotels"""
+    def _is_hotel_query(self, message: str, context: Dict[str, Any] = None) -> bool:
+        """Check if the message is asking about hotels or continuing hotel conversation"""
         hotel_keywords = [
             "酒店", "hotel", "住宿", "宾馆", "旅馆", "resort", "boutique", 
             "accommodation", "lodging", "inn", "suite", "lodge"
         ]
         message_lower = message.lower()
-        return any(keyword in message_lower for keyword in hotel_keywords)
+        
+        # Check if current message contains hotel keywords
+        if any(keyword in message_lower for keyword in hotel_keywords):
+            return True
+        
+        # Check if we're in a hotel conversation (context has hotel_slots)
+        if context and "hotel_slots" in context:
+            hotel_slots = context["hotel_slots"]
+            # If we have a city but missing other required info, continue hotel conversation
+            if hotel_slots.get("city") and not hotel_slots.get("check_in"):
+                return True
+        
+        return False
 
     def _extract_destination_from_message(self, message: str) -> Optional[str]:
         """Extract destination from message text"""
@@ -2687,10 +2700,35 @@ Guidelines:
                 # Instagram URL can only contain one hashtag, so we use the brand hashtag
                 # Users can manually add the destination hashtag in the search
                 search_hashtags = f"{clean_brand} {destination_hashtag}"
-                instagram_search_url = f"https://www.instagram.com/explore/tags/{clean_brand}/"
                 
-                # Create button data with English name only
-                button_text = english_name
+                # Strategy: Use the most specific hashtag for better results
+                # Simple rule: If brand name is too short or contains only generic words, use destination
+                # Otherwise, use brand name
+                is_generic = (
+                    len(clean_brand) <= 4 or  # Too short
+                    clean_brand in ['hotel', 'resort', 'inn', 'lodge', 'suite', 'palace', 'tower', 'plaza'] or  # Pure generic
+                    # Only consider as generic if it's very short and ends with generic words
+                    (clean_brand.endswith('hotel') and len(clean_brand) <= 8) or  # Very short hotel names
+                    (clean_brand.endswith('resort') and len(clean_brand) <= 8) or  # Very short resort names
+                    (clean_brand.endswith('inn') and len(clean_brand) <= 6) or  # Very short inn names
+                    # Specific known generic patterns (very short combinations)
+                    clean_brand in ['abchotel', 'xyzhotel', 'resorthotel', 'innhotel']  # Very short generic patterns
+                )
+                
+                if is_generic:
+                    # For generic hotel names, combine brand and destination for better search results
+                    primary_hashtag = f"{clean_brand}{destination_hashtag}"
+                    secondary_hashtag = destination_hashtag
+                else:
+                    primary_hashtag = clean_brand
+                    secondary_hashtag = destination_hashtag
+                
+                instagram_search_url = f"https://www.instagram.com/explore/tags/{primary_hashtag}/"
+                
+                # Create button data with both hashtags in text for user reference
+                # Show both hashtags in button text so users know what to search for
+                button_text = f"{english_name} (#{primary_hashtag} #{secondary_hashtag})"
+                
                 buttons.append({
                     "text": button_text,
                     "url": instagram_search_url

@@ -9,6 +9,9 @@ from app.services.conversation_memory import conversation_memory
 from app.services.plan_storage import plan_storage
 from app.services.follow_up_questions import follow_up_service
 from app.services.inline_keyboards import inline_keyboard_service
+from app.services.hotel_ui_service import HotelUIService
+from app.services.hotel_state_machine import hotel_state_machine
+from app.services.hotel_ui_v2 import hotel_ui_v2
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +19,7 @@ logger = logging.getLogger(__name__)
 class MessageHandlers:
     def __init__(self):
         self.llm_service = LLMService()
+        self.hotel_ui_service = HotelUIService()
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command with LLM-generated welcome"""
@@ -475,11 +479,31 @@ class MessageHandlers:
                     query, context, user_name, chat_id
                 )
             
-            # Try to remove the inline keyboard (optional)
-            try:
-                await query.edit_message_reply_markup(reply_markup=None)
-            except BadRequest:
-                pass  # Message too old or already modified
+            elif action == "hotel_ui":
+                # User clicked hotel UI button
+                await self._handle_hotel_ui_callback(
+                    query, context, user_name, chat_id
+                )
+            
+            elif action in ["set_city", "set_budget", "set_location", "set_tags", "set_checkin", 
+                           "set_checkout", "set_party", "set_extras", "generate_recommendation",
+                           "toggle_tag", "set_adults", "set_children", "set_rooms", "toggle_facility",
+                           "set_view", "set_open_after", "set_brand", "confirm_children_yes",
+                           "confirm_children_no", "add_child_age", "custom_city", "custom_budget",
+                           "custom_location", "confirm_tags", "confirm_party", "confirm_extras",
+                           "confirm_facilities", "confirm_view", "confirm_brand", "confirm_open_after",
+                           "back_main", "back_extras", "change_hotels", "compare_hotels"]:
+                # User clicked new hotel UI button
+                await self._handle_new_hotel_ui_callback(
+                    query, context, user_name, chat_id
+                )
+            
+            # Try to remove the inline keyboard (optional) - but not for hotel_ui
+            if action != "hotel_ui":
+                try:
+                    await query.edit_message_reply_markup(reply_markup=None)
+                except BadRequest:
+                    pass  # Message too old or already modified
                 
         except Exception as e:
             logger.error(f"Error handling callback query: {e}")
@@ -660,6 +684,27 @@ class MessageHandlers:
             "user_name": user_name,
             "urls": urls
         }
+        
+        # Initialize hotel_slots in context if not exists
+        if "hotel_slots" not in llm_context:
+            llm_context["hotel_slots"] = {}
+        
+        # Check if user is in hotel UI input mode
+        if "awaiting" in context.user_data:
+            awaiting = context.user_data["awaiting"]
+            if awaiting in ["city", "budget"]:
+                # Handle hotel UI text input
+                await self._handle_hotel_ui_text_input(
+                    update, context, message_text, awaiting, user_name, chat_id
+                )
+                return
+        
+        # Check if this is a hotel-related query and show new hotel UI
+        if self._is_hotel_related_message(message_text):
+            logger.info(f"Hotel-related message detected: {message_text[:50]}...")
+            await self._show_new_hotel_ui_interface(update, context, user_name, chat_id)
+            logger.info("New hotel UI interface shown, returning early")
+            return
         
         try:
             # Generate response WITHOUT follow-up questions (we'll add them separately)
@@ -1048,6 +1093,419 @@ class MessageHandlers:
             )
         except Exception as e:
             logger.error(f"Error handling share location callback: {e}")
+
+    async def _handle_hotel_ui_callback(
+        self, 
+        query, 
+        context: ContextTypes.DEFAULT_TYPE, 
+        user_name: str, 
+        chat_id: int
+    ):
+        """Handle hotel UI callback queries"""
+        try:
+            callback_data = query.data
+            
+            # Initialize hotel slots if not exists
+            if "hotel_slots" not in context.user_data:
+                context.user_data["hotel_slots"] = {
+                    "city": None,
+                    "check_in": None,
+                    "nights": None,
+                    "check_out": None,
+                    "budget_range_local": None,
+                    "party": {"adults": 2, "children": 0, "rooms": 1},
+                }
+            
+            slots = context.user_data["hotel_slots"]
+            
+            if callback_data == "hotel_ui:back_main":
+                # Return to main menu
+                await query.edit_message_text(
+                    self.hotel_ui_service.get_initial_message(slots),
+                    reply_markup=self.hotel_ui_service.get_main_menu_keyboard()
+                )
+                return
+            
+            elif callback_data == "hotel_ui:ask_city":
+                # Ask for city input
+                await query.edit_message_text(
+                    self.hotel_ui_service.get_city_input_message()
+                )
+                context.user_data["awaiting"] = "city"
+                return
+            
+            elif callback_data == "hotel_ui:ask_checkin":
+                # Show date selection
+                await query.edit_message_text(
+                    "📅 **请选择入住日期**\n\n选择未来14天内的日期：",
+                    reply_markup=self.hotel_ui_service.get_quick_dates_keyboard()
+                )
+                return
+            
+            elif callback_data == "hotel_ui:ask_nights":
+                # Show nights selection
+                await query.edit_message_text(
+                    "🛏 **请选择住宿晚数**\n\n选择您计划住几晚：",
+                    reply_markup=self.hotel_ui_service.get_nights_keyboard()
+                )
+                return
+            
+            elif callback_data == "hotel_ui:ask_budget":
+                # Show budget selection
+                await query.edit_message_text(
+                    "💰 **请选择每晚预算**\n\n选择您的预算范围：",
+                    reply_markup=self.hotel_ui_service.get_budget_keyboard()
+                )
+                return
+            
+            elif callback_data == "hotel_ui:ask_party":
+                # Show party selection
+                await query.edit_message_text(
+                    self.hotel_ui_service.get_summary_text(slots) + 
+                    "\n\n👪 **调整同行人数和房间数**\n\n使用下方按钮调整：",
+                    reply_markup=self.hotel_ui_service.get_party_keyboard()
+                )
+                return
+            
+            elif callback_data == "hotel_ui:custom_budget":
+                # Ask for custom budget
+                await query.edit_message_text(
+                    self.hotel_ui_service.get_budget_input_message()
+                )
+                context.user_data["awaiting"] = "budget"
+                return
+            
+            elif callback_data == "hotel_ui:done":
+                # Complete hotel search
+                await query.edit_message_text(
+                    self.hotel_ui_service.get_completion_message(slots)
+                )
+                
+                # Generate hotel recommendations using the collected slots
+                await self._generate_hotel_recommendations_from_slots(
+                    query, context, slots, user_name, chat_id
+                )
+                return
+            
+            # Handle slot updates (only if not handled by specific cases above)
+            try:
+                if self.hotel_ui_service.update_slots_from_callback(slots, callback_data):
+                    # Update successful, show updated summary
+                    await query.edit_message_text(
+                        self.hotel_ui_service.get_summary_text(slots),
+                        reply_markup=self.hotel_ui_service.get_main_menu_keyboard()
+                    )
+                    return
+                else:
+                    # Update failed, show error message
+                    await query.edit_message_text(
+                        "❌ 设置失败，请重试。",
+                        reply_markup=self.hotel_ui_service.get_main_menu_keyboard()
+                    )
+                    return
+            except Exception as e:
+                logger.error(f"Error updating slots from callback: {e}")
+                await query.edit_message_text(
+                    "❌ 处理您的选择时出现错误，请重试。",
+                    reply_markup=self.hotel_ui_service.get_main_menu_keyboard()
+                )
+                return
+            
+        except Exception as e:
+            logger.error(f"Error handling hotel UI callback: {e}")
+            await query.edit_message_text("抱歉，处理您的选择时出现了错误。")
+
+    async def _generate_hotel_recommendations_from_slots(
+        self, 
+        query, 
+        context: ContextTypes.DEFAULT_TYPE, 
+        slots: dict, 
+        user_name: str, 
+        chat_id: int
+    ):
+        """Generate hotel recommendations from collected slots"""
+        try:
+            logger.info(f"Generating hotel recommendations from slots: {slots}")
+            
+            # Convert slots to hotel agent format - include all required fields
+            from app.services.hotel_agent import hotel_agent
+            default_slots = hotel_agent._initialize_slots()
+            
+            hotel_slots = {
+                "city": slots.get("city"),
+                "check_in": slots.get("check_in"),
+                "check_out": slots.get("check_out"),
+                "party": slots.get("party", {"adults": 2, "children": 0, "rooms": 1}),
+                "budget_range_local": slots.get("budget_range_local"),
+                "city_type": "A",  # Default to A tier
+                "star_level": default_slots["star_level"],
+                "preferred_area": default_slots["preferred_area"],
+                "preferred_brands": default_slots["preferred_brands"],
+                "special_needs": default_slots["special_needs"],
+                "view": default_slots["view"],
+                "breakfast_needed": default_slots["breakfast_needed"],
+                "style": default_slots["style"]
+            }
+            
+            logger.info(f"Converted hotel_slots: {hotel_slots}")
+            
+            # Use hotel agent to generate recommendations
+            hotel_agent.slots = hotel_slots
+            logger.info(f"Set hotel_agent.slots: {hotel_agent.slots}")
+            
+            # Generate hotel recommendations
+            # The method uses hotel_agent.slots internally, so we just need to pass any context
+            logger.info("Calling _generate_hotel_recommendations...")
+            recommendations = await self.llm_service._generate_hotel_recommendations({})
+            logger.info(f"Generated recommendations: {recommendations[:100] if recommendations else 'None'}...")
+            
+            if recommendations:
+                # Send recommendations with Instagram buttons
+                # Create a mock update object for the callback query
+                from telegram import Update
+                mock_update = Update(update_id=0, callback_query=query)
+                await self._send_influencer_hotel_response(
+                    mock_update, recommendations, slots.get("city", ""), chat_id
+                )
+            else:
+                await query.edit_message_text(
+                    "抱歉，没有找到合适的酒店推荐。请尝试调整您的搜索条件。"
+                )
+                
+        except Exception as e:
+            logger.error(f"Error generating hotel recommendations: {e}")
+            await query.edit_message_text(
+                "抱歉，生成酒店推荐时出现了错误。请稍后重试。"
+            )
+
+    async def _handle_hotel_ui_text_input(
+        self, 
+        update: Update, 
+        context: ContextTypes.DEFAULT_TYPE, 
+        message_text: str, 
+        awaiting: str, 
+        user_name: str, 
+        chat_id: int
+    ):
+        """Handle hotel UI text input (city, budget)"""
+        try:
+            # Initialize hotel slots if not exists
+            if "hotel_slots" not in context.user_data:
+                context.user_data["hotel_slots"] = {
+                    "city": None,
+                    "check_in": None,
+                    "nights": None,
+                    "check_out": None,
+                    "budget_range_local": None,
+                    "party": {"adults": 2, "children": 0, "rooms": 1},
+                }
+            
+            slots = context.user_data["hotel_slots"]
+            
+            # Update slots based on input
+            if self.hotel_ui_service.update_slots_from_text(slots, message_text, awaiting):
+                # Clear awaiting state
+                context.user_data["awaiting"] = None
+                
+                # Send confirmation and show updated menu
+                await update.message.reply_text(
+                    f"✅ 已设置{'目的地' if awaiting == 'city' else '预算'}！\n\n" +
+                    self.hotel_ui_service.get_summary_text(slots),
+                    reply_markup=self.hotel_ui_service.get_main_menu_keyboard()
+                )
+            else:
+                await update.message.reply_text(
+                    "❌ 输入格式不正确，请重新输入：\n\n" +
+                    (self.hotel_ui_service.get_city_input_message() if awaiting == "city" 
+                     else self.hotel_ui_service.get_budget_input_message())
+                )
+                
+        except Exception as e:
+            logger.error(f"Error handling hotel UI text input: {e}")
+            await update.message.reply_text("抱歉，处理您的输入时出现了错误。")
+
+    def _is_hotel_related_message(self, message: str) -> bool:
+        """Check if message is hotel-related"""
+        hotel_keywords = [
+            "酒店", "hotel", "住宿", "宾馆", "旅馆", "resort", "boutique", 
+            "accommodation", "lodging", "inn", "suite", "lodge", "预订酒店",
+            "推荐酒店", "酒店推荐", "订酒店", "找酒店", "酒店选择"
+        ]
+        message_lower = message.lower()
+        return any(keyword in message_lower for keyword in hotel_keywords)
+
+    async def _show_hotel_ui_interface(
+        self, 
+        update: Update, 
+        context: ContextTypes.DEFAULT_TYPE, 
+        user_name: str, 
+        chat_id: int
+    ):
+        """Show hotel UI interface"""
+        try:
+            # Initialize hotel slots if not exists
+            if "hotel_slots" not in context.user_data:
+                context.user_data["hotel_slots"] = {
+                    "city": None,
+                    "check_in": None,
+                    "nights": None,
+                    "check_out": None,
+                    "budget_range_local": None,
+                    "party": {"adults": 2, "children": 0, "rooms": 1},
+                }
+            
+            slots = context.user_data["hotel_slots"]
+            
+            # Try to extract city from message
+            city = self._extract_city_from_message(update.message.text)
+            if city:
+                slots["city"] = city
+            
+            await update.message.reply_text(
+                self.hotel_ui_service.get_initial_message(slots),
+                reply_markup=self.hotel_ui_service.get_main_menu_keyboard()
+            )
+            
+        except Exception as e:
+            logger.error(f"Error showing hotel UI interface: {e}")
+            await update.message.reply_text("抱歉，显示酒店推荐界面时出现了错误。")
+    
+    async def _show_new_hotel_ui_interface(
+        self, 
+        update: Update, 
+        context: ContextTypes.DEFAULT_TYPE, 
+        user_name: str, 
+        chat_id: int
+    ):
+        """显示新的酒店UI界面"""
+        try:
+            # 为每个用户创建独立的状态机实例
+            if "hotel_state_machine" not in context.user_data:
+                from app.services.hotel_state_machine import HotelStateMachine
+                context.user_data["hotel_state_machine"] = HotelStateMachine()
+            
+            state_machine = context.user_data["hotel_state_machine"]
+            
+            # 使用新的状态机处理消息
+            state, message, keyboard_data = state_machine.process_message(
+                update.message.text, None
+            )
+            
+            # 获取键盘
+            keyboard = hotel_ui_v2.get_keyboard(keyboard_data["type"])
+            
+            await update.message.reply_text(
+                message,
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+            
+        except Exception as e:
+            logger.error(f"Error showing new hotel UI interface: {e}")
+            await update.message.reply_text("抱歉，显示酒店推荐界面时出现了错误。")
+    
+    async def _handle_new_hotel_ui_callback(
+        self, 
+        query, 
+        context: ContextTypes.DEFAULT_TYPE, 
+        user_name: str, 
+        chat_id: int
+    ):
+        """处理新的酒店UI回调"""
+        try:
+            callback_data = query.data
+            logger.info(f"Handling new hotel UI callback: {callback_data}")
+            
+            # 为每个用户创建独立的状态机实例
+            if "hotel_state_machine" not in context.user_data:
+                from app.services.hotel_state_machine import HotelStateMachine
+                context.user_data["hotel_state_machine"] = HotelStateMachine()
+            
+            state_machine = context.user_data["hotel_state_machine"]
+            
+            # 使用新的状态机处理回调
+            logger.info(f"Processing callback: {callback_data}")
+            state, message, keyboard_data = state_machine.process_message(
+                None, callback_data
+            )
+            
+            logger.info(f"State machine returned: state={state}")
+            logger.info(f"Message length: {len(message)}, content: {message}")
+            logger.info(f"Keyboard data: {keyboard_data}")
+            
+            # 获取键盘
+            keyboard = hotel_ui_v2.get_keyboard(keyboard_data["type"])
+            logger.info(f"Generated keyboard type: {keyboard_data['type']}")
+            logger.info(f"Keyboard object: {keyboard}")
+            logger.info(f"Keyboard inline_keyboard: {keyboard.inline_keyboard if keyboard else 'None'}")
+            
+            # 检查键盘是否为空
+            if keyboard is None:
+                logger.error(f"Keyboard is None for type: {keyboard_data['type']}")
+                keyboard = hotel_ui_v2.get_keyboard("main_menu")  # 使用主菜单作为备用
+                logger.info(f"Using fallback keyboard: {keyboard}")
+            
+            # 尝试编辑消息，如果失败则发送新消息
+            logger.info("Attempting to edit message...")
+            try:
+                await query.edit_message_text(
+                    message,
+                    reply_markup=keyboard,
+                    parse_mode='Markdown'
+                )
+                logger.info("✅ Successfully edited message with keyboard")
+            except Exception as edit_error:
+                logger.warning(f"❌ Edit message failed: {edit_error}")
+                logger.warning(f"Error type: {type(edit_error)}")
+                logger.warning(f"Error details: {str(edit_error)}")
+                # 编辑失败，发送新消息
+                logger.info("Attempting to send new message...")
+                try:
+                    await query.message.reply_text(
+                        message,
+                        reply_markup=keyboard,
+                        parse_mode='Markdown'
+                    )
+                    logger.info("✅ Successfully sent new message with keyboard")
+                except Exception as reply_error:
+                    logger.error(f"❌ Reply message also failed: {reply_error}")
+                    logger.error(f"Reply error type: {type(reply_error)}")
+                    # 最后的备用方案：发送简单消息
+                    try:
+                        await query.message.reply_text(
+                            "抱歉，显示预算选择时出现了问题。请重试。",
+                            reply_markup=keyboard
+                        )
+                    except Exception as final_error:
+                        logger.error(f"Final fallback also failed: {final_error}")
+                        # 最后的最后：只发送文本消息
+                        await query.message.reply_text(
+                            "抱歉，显示预算选择时出现了问题。请重试。"
+                        )
+            
+        except Exception as e:
+            logger.error(f"Error handling new hotel UI callback: {e}")
+            # 发送带键盘的错误消息
+            try:
+                error_keyboard = hotel_ui_v2.get_keyboard("main_menu")
+                await query.edit_message_text(
+                    "抱歉，处理您的选择时出现了错误。请重试。",
+                    reply_markup=error_keyboard
+                )
+            except:
+                await query.message.reply_text("抱歉，处理您的选择时出现了错误。请重试。")
+
+    def _extract_city_from_message(self, message: str) -> str:
+        """Extract city name from message"""
+        # Simple city extraction - can be enhanced
+        cities = ["东京", "Tokyo", "上海", "Shanghai", "北京", "Beijing", "大阪", "Osaka", 
+                 "京都", "Kyoto", "箱根", "Hakone", "纽约", "New York", "巴黎", "Paris",
+                 "伦敦", "London", "新加坡", "Singapore", "香港", "Hong Kong", "台北", "Taipei"]
+        
+        for city in cities:
+            if city in message:
+                return city
+        return None
 
     async def _send_hotel_response_with_media(
         self, 

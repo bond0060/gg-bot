@@ -1,5 +1,6 @@
 
 import logging
+import asyncio
 from dotenv import load_dotenv
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from app.config.settings import settings
@@ -11,14 +12,28 @@ load_dotenv()
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.INFO,
+    handlers=[
+        logging.FileHandler('bot.log'),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 
 
 class TravelBot:
     def __init__(self):
-        self.application = Application.builder().token(settings.telegram_bot_token).build()
+        # Build application with better network configuration
+        self.application = (
+            Application.builder()
+            .token(settings.telegram_bot_token)
+            .connection_pool_size(1)
+            .read_timeout(10)
+            .write_timeout(10)
+            .connect_timeout(10)
+            .pool_timeout(10)
+            .build()
+        )
         self.handlers = MessageHandlers()
         self._setup_handlers()
 
@@ -55,7 +70,21 @@ class TravelBot:
         
         logger.info(f"Starting {settings.bot_name}...")
         logger.info(f"Using OpenAI model: {settings.openai_model}")
-        self.application.run_polling()
+        
+        try:
+            # Run with better error handling and retry
+            self.application.run_polling(
+                drop_pending_updates=True,
+                close_loop=False,
+                stop_signals=None
+            )
+        except Exception as e:
+            logger.error(f"Error running bot: {e}")
+            # Try to restart after a short delay
+            import time
+            time.sleep(5)
+            logger.info("Attempting to restart bot...")
+            self.application.run_polling(drop_pending_updates=True)
 
 
 def main():
@@ -73,6 +102,7 @@ def main():
         logger.error("Please check your .env file has all required variables:")
         logger.error("TELEGRAM_BOT_TOKEN=your_telegram_bot_token")
         logger.error("OPENAI_API_KEY=your_openai_api_key")
+        raise
 
 
 if __name__ == "__main__":
